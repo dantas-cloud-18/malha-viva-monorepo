@@ -1,0 +1,49 @@
+# Build
+build/
+.gradle/
+out/
+*.class
+*.log
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Android
+local.properties
+*.apk
+*.aab
+captures/
+.cxx/
+
+# iOS
+DerivedData/
+*.xcuserstate
+xcuserdata/
+Pods/
+.build/
+.swiftpm/
+
+# Segredos
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.p8
+*.p12
+*.mobileprovision
+google-services.json
+GoogleService-Info.plist
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!example.tfvars
+
+# Ferramentas de assistente (fora dos artefatos de release)
+.omc/
