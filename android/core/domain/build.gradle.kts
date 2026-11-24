@@ -9,6 +9,10 @@ java {
     targetCompatibility = JavaVersion.VERSION_17
 }
 
+dependencies {
+    testImplementation(libs.junit)
+}
+
 kotlin {
     compilerOptions.jvmTarget.set(JvmTarget.JVM_17)
 }
