@@ -4,7 +4,11 @@ import br.malhaviva.core.domain.sampling.SampleBatch
 import br.malhaviva.core.domain.tracking.Route
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 /** Eventos do servico para a UI. */
 sealed interface ServiceEvent {
@@ -21,12 +25,25 @@ sealed interface ServiceEvent {
     ) : ServiceEvent
 }
 
-/** Canal servico -> ViewModel no mesmo processo. Sem replay: evento so vale se a UI estiver ouvindo. */
+/**
+ * Canal servico -> ViewModel no mesmo processo. [events] nao tem replay: evento so vale se a UI estiver
+ * ouvindo. [active] guarda a viagem em curso para um ViewModel novo saber que o servico ja roda.
+ */
 object TrackingBridge {
     private val mutableEvents = MutableSharedFlow<ServiceEvent>(extraBufferCapacity = EVENT_BUFFER)
     val events: Flow<ServiceEvent> = mutableEvents.asSharedFlow()
 
+    private val mutableActive = MutableStateFlow<TrackingState.Active?>(null)
+    val active: StateFlow<TrackingState.Active?> = mutableActive.asStateFlow()
+
     fun publish(event: ServiceEvent) {
+        mutableActive.update { current ->
+            when (event) {
+                is ServiceEvent.Started -> TrackingState.Active(event.sinceMs, TripStatus.Waiting)
+                is ServiceEvent.Status -> current?.copy(lastStatus = event.status)
+                is ServiceEvent.Stopped -> null
+            }
+        }
         mutableEvents.tryEmit(event)
     }
 
@@ -44,7 +61,7 @@ fun interface RouteProvider {
     fun current(): Route?
 }
 
-/** Envio do lote. A implementacao real (HTTP assinado) vem depois; false significa falha. */
+/** Envio do lote; false significa falha. A implementacao real e `net.HttpBatchUploader`. */
 interface BatchUploader {
     suspend fun upload(batch: SampleBatch): Boolean
 }

@@ -5,6 +5,14 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+// Base da API: -Pmalhaviva.apiBaseUrl=... ; debug aponta para o host do emulador, release exige https.
+val apiBaseUrl: String? = providers.gradleProperty("malhaviva.apiBaseUrl").orNull
+val releaseApiBaseUrl: String = apiBaseUrl ?: "https://api.malhaviva.invalid"
+val buildsRelease = gradle.startParameter.taskNames.any { it.contains("release", ignoreCase = true) }
+check(!buildsRelease || releaseApiBaseUrl.startsWith("https://")) {
+    "malhaviva.apiBaseUrl precisa ser https:// no release (recebido: $releaseApiBaseUrl)"
+}
+
 android {
     namespace = "br.malhaviva.app"
     compileSdk { version = release(37) { minorApiLevel = 1 } }
@@ -17,8 +25,14 @@ android {
         versionName = "0.1.0"
     }
 
+    buildFeatures { buildConfig = true }
+
     buildTypes {
+        debug {
+            buildConfigField("String", "API_BASE_URL", "\"${apiBaseUrl ?: "http://10.0.2.2:8080"}\"")
+        }
         release {
+            buildConfigField("String", "API_BASE_URL", "\"$releaseApiBaseUrl\"")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))

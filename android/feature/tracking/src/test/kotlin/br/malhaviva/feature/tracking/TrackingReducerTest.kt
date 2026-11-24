@@ -4,6 +4,7 @@ import app.cash.turbine.test
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -116,4 +117,21 @@ class TrackingReducerTest {
             viewModel.onIntent(TrackingIntent.OptIn)
             assertEquals(TrackingState.Off, viewModel.state.value)
         }
+
+    @Test
+    fun `fresh viewmodel learns that the service is already running`() =
+        runTest {
+            val running = MutableStateFlow<TrackingState.Active?>(TrackingState.Active(9L, TripStatus.Paused))
+            val viewModel = TrackingViewModel(serviceEvents = MutableSharedFlow(), runningNow = running)
+            assertEquals(TrackingState.Active(9L, TripStatus.Paused), viewModel.state.value)
+        }
+
+    @Test
+    fun `bridge replays the active trip until it stops`() {
+        TrackingBridge.publish(ServiceEvent.Started(3L))
+        TrackingBridge.publish(ServiceEvent.Status(TripStatus.Sending))
+        assertEquals(TrackingState.Active(3L, TripStatus.Sending), TrackingBridge.active.value)
+        TrackingBridge.publish(ServiceEvent.Stopped(StopCause.UserStopped))
+        assertEquals(null, TrackingBridge.active.value)
+    }
 }

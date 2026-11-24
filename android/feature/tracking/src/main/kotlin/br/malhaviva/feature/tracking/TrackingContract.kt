@@ -54,6 +54,12 @@ sealed interface TrackingIntent {
         val sinceMs: Long,
     ) : TrackingIntent
 
+    /** Servico ja rodava quando a UI nasceu (ex.: tela recriada); vale mesmo fora do estado Starting. */
+    data class ServiceAlreadyRunning(
+        val sinceMs: Long,
+        val status: TripStatus,
+    ) : TrackingIntent
+
     data class StatusChanged(
         val status: TripStatus,
     ) : TrackingIntent
@@ -116,6 +122,8 @@ private fun reduceRunning(
     when (intent) {
         is TrackingIntent.ServiceStarted ->
             if (state == TrackingState.Starting) TrackingState.Active(intent.sinceMs, TripStatus.Waiting) else state
+        is TrackingIntent.ServiceAlreadyRunning ->
+            if (state is TrackingState.Active) state else TrackingState.Active(intent.sinceMs, intent.status)
         is TrackingIntent.StatusChanged ->
             if (state is TrackingState.Active) state.copy(lastStatus = intent.status) else state
         TrackingIntent.StopRequested ->

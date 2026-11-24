@@ -18,6 +18,7 @@ dependencies {
     implementation(libs.play.services.location)
 
     testImplementation(libs.junit)
+    testImplementation(libs.org.json)
     testImplementation(libs.turbine)
     testImplementation(libs.coroutines.test)
 }
