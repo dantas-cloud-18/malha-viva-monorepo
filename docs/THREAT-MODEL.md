@@ -12,7 +12,8 @@ informação, **D** negação de serviço, **E** elevação de privilégio.
 Dois planos separados por desenho:
 
 - **Plano de identidade** (contas, login, recuperação, sessão): tabelas `accounts` e `refresh_tokens`
-  (`V3__accounts.sql`). Nenhuma tabela dele é referenciada pela telemetria.
+  (`V3__accounts.sql`), `devices` (`V4__sessions.sql`), `otp_codes`, `contact_changes` e `totp_secrets`
+  (`V5__recovery.sql`). Nenhuma tabela dele é referenciada pela telemetria.
 - **Plano de telemetria** (posições de passageiros): token anônimo emitido sem conta, aparelho ou IP
   (`TokenIssuer`), posições sem `user_id`, handle, IP ou modelo de aparelho (`V2__telemetry.sql`).
 
@@ -33,8 +34,9 @@ Estado de implementação (resumo):
 | Cliente Android de rastreamento (opt-in, check-in, sanitização, lote assinado) | Implementado |
 | Distribuição em tempo real (polling `GET` e SSE) | Implementado, sem autenticação (dados públicos) |
 | Política de senha (tamanho, NFKC, Pwned Passwords k-anonimato, zxcvbn) | Implementado (`auth/PasswordPolicy.kt`) |
-| Hash de senha, login, rotas `/auth/*`, refresh rotativo | NAO IMPLEMENTADO (só contrato em `contracts/openapi.yaml` e tabelas no `V3`) |
-| Recuperação de conta (OTP) | NAO IMPLEMENTADO |
+| Hash argon2id com pepper, login (`/auth/token`), refresh rotativo com detecção de reuso, dispositivos (`/me/devices`) | Implementado (`auth/`). Testes de rota usam repositórios em memória |
+| Recuperação de conta (OTP, anti-SIM swap, troca de contato com espera de 24 h, limites anti-SMS pumping) | Implementado no backend (`auth/recovery/`), **sem provedor de SMS/e-mail**: em produção o envio é fail-closed, então nenhum OTP sai até a escolha do provedor. Repositórios JDBC do V5 não foram exercitados contra Postgres |
+| TOTP (RFC 6238) | Primitivas e serviço prontos e testados (`auth/recovery/Totp.kt`); **NAO IMPLEMENTADO** no login, em rotas e como exigência do admin |
 | Atestação real (Play Integrity, App Attest) | NAO IMPLEMENTADO |
 | Armazenamento persistente de tokens e nonces | NAO IMPLEMENTADO |
 | Widgets/Live Activities (iOS) | NAO IMPLEMENTADO (só arquivo-base `ios/Widgets/MalhaVivaWidgets.swift`) |
@@ -44,45 +46,63 @@ Estado de implementação (resumo):
 
 ## 2. Login
 
-**Ativos:** credenciais (senha, hash), contas (`accounts`), tokens de acesso e refresh (`refresh_tokens`),
-telefone e e-mail do titular.
+**Ativos:** credenciais (senha, hash), contas (`accounts`), tokens de acesso e refresh (`refresh_tokens`,
+`devices`), telefone e e-mail do titular.
 
 **Fronteiras:** F1 (app para API), F2 (API para banco).
 
-| STRIDE | Ameaça | Mitigação existente | Residual / aberto |
-|---|---|---|---|
-| S | Credential stuffing, força bruta, senha vazada reutilizada | Política de senha: mínimo 8, máximo 128 pontos de código após NFKC, consulta Pwned Passwords por k-anonimato (só o prefixo de 5 caracteres do SHA-1 sai da máquina), zxcvbn com score mínimo 3, sem regras de composição | Rate limit por conta/IP no login, atraso progressivo, CAPTCHA e detecção de credential stuffing: NAO IMPLEMENTADO. Mensagem genérica de erro: NAO IMPLEMENTADO (não há rota de login) |
-| S | Roubo de refresh token | Esquema do banco guarda só `token_hash` e prevê `family_id`, `replaced_at`, `revoked_at` para revogar família no reuso | Lógica de rotação e detecção de reuso: NAO IMPLEMENTADO. Tela "Dispositivos conectados": NAO IMPLEMENTADO |
-| T | Adulteração do hash ou do fluxo de login | Esquema usa hash em coluna dedicada; nada de senha em texto | Hash argon2id (m ≥ 19 MiB, t = 2, p = 1) e pepper em secret manager: NAO IMPLEMENTADO. O Terraform prevê um secret (`aws_secretsmanager_secret.app`), mas o código não o usa para pepper |
-| R | Usuário nega ter feito login | Nenhuma | Log de auditoria de autenticação sem dado pessoal: NAO IMPLEMENTADO |
-| I | Enumeração de contas (cadastro/login), vazamento de PII em log | Nas rotas de telemetria o backend não registra corpo, token nem coordenadas (comentários e código de `TokenRoutes`/`BatchIngestor`) | Para login: NAO IMPLEMENTADO. Índices únicos em handle/telefone/e-mail existem e exigem resposta uniforme no cadastro |
-| D | Hash caro usado como amplificação de DoS | Nenhuma ainda | Limite de taxa antes do hash: NAO IMPLEMENTADO |
-| E | Token de sessão usado em área indevida (IDOR) | Telemetria é anônima e não usa conta; nenhuma rota de conta existe ainda | Autorização por recurso no servidor: NAO IMPLEMENTADO (a verificar quando as rotas existirem) |
+Fluxo implementado: `POST /v1/auth/accounts`, `/auth/token`, `/auth/refresh`, `/auth/logout`, `GET /me/devices`,
+`DELETE /me/devices/{id}` (`auth/AuthRoutes.kt`, `AuthService`, `SessionService`, `LoginGuard`).
 
-**Risco residual:** alto até existirem hash, rate limit e rotação de refresh. Hoje não há login ativo, então
-a exposição é de projeto, não de produção.
+| STRIDE | Ameaça | Mitigação existente (verificada no código) | Residual / aberto |
+|---|---|---|---|
+| S | Credential stuffing, força bruta, senha vazada reutilizada | Política de senha: mínimo 8, máximo 128 pontos de código após NFKC, Pwned Passwords por k-anonimato (só o prefixo de 5 caracteres do SHA-1 sai da máquina), zxcvbn com score mínimo 3, sem regras de composição. Limite de taxa por IP (capacidade 20, 1 a cada 3 s) e por handle (10, 1 a cada 6 s) antes do hash. `LoginGuard`: atraso progressivo (1 s dobrando até 15 min) por par IP+handle e por IP após 3 falhas; CAPTCHA exigido após 5 falhas por handle ou IP; mais de 20 handles distintos de um IP em 10 min bloqueia o IP. Logs só com contagens, nunca IP nem handle | **CAPTCHA real: NAO IMPLEMENTADO.** O verificador padrão é `NoopCaptchaVerifier` (aceita qualquer token não vazio; log de aviso na subida). Estado do `LoginGuard` e dos limitadores só em memória de um nó, sem limpeza de chaves. IP é `request.local.remoteAddress` (ver seção 8) |
+| S | Roubo de refresh token | Refresh opaco de 256 bits, guardado só como SHA-256, rotativo a cada uso; reuso de token já trocado (ou troca concorrente) revoga a família inteira; validade absoluta de 30 dias; "Dispositivos conectados" lista e revoga por dispositivo (família) | O access token é JWT HS256 sem lista de revogação: segue válido até vencer (15 min) mesmo após logout, revogação ou recuperação. Rotação do segredo JWT: NAO IMPLEMENTADO |
+| T | Adulteração do hash ou do fluxo de login | argon2id (m = 19 MiB, t = 2, p = 1) sobre HMAC-SHA256(pepper, senha), formato PHC, rehash automático quando os parâmetros mudam; pepper e segredo JWT (≥ 32 bytes) vêm do ambiente e a falta deles derruba a subida; JWT exige exatamente o cabeçalho HS256 (sem `alg: none`) e leva só `sub`, `iat`, `exp` | Pepper em secret manager com rotação: NAO IMPLEMENTADO (o código lê variável de ambiente; o Terraform prevê `aws_secretsmanager_secret.app`, mas a injeção na tarefa não foi verificada) |
+| R | Usuário nega ter feito login | Nenhuma além do log operacional | Log de auditoria de autenticação sem dado pessoal: NAO IMPLEMENTADO |
+| I | Enumeração de contas (login), vazamento de PII em log | Handle inexistente e senha errada dão o mesmo 401 e exatamente uma verificação de hash (hash descartável); corpo inválido nunca é refletido; o token de acesso não carrega handle, telefone ou e-mail | O cadastro responde 409 quando o handle existe: aceito, o handle é público por desenho. Telefone e e-mail nunca disparam conflito no cadastro (ver seção 3) |
+| D | Hash caro usado como amplificação de DoS | Limite de taxa por IP e por handle antes do hash; tamanho máximo da senha e do handle checado antes do hash | Limites por IP dependem do IP real (seção 8) |
+| E | Token de sessão usado em área indevida (IDOR) | Rotas de conta exigem access token válido; `DELETE /me/devices/{id}` de dispositivo alheio responde 404, igual ao inexistente; telemetria é anônima e não usa token de conta | Autorização por recurso nas demais rotas de conta a verificar quando existirem |
+
+**Risco residual:** médio. Falta CAPTCHA real, IP real atrás do balanceador, estado compartilhado entre nós e
+revogação imediata do access token.
 
 ---
 
 ## 3. Recuperação de conta
 
-**Ativos:** controle da conta, OTP, telefone e e-mail verificados.
+**Ativos:** controle da conta, OTP, telefone e e-mail verificados, segredo TOTP.
 
-**Fronteiras:** F1, e provedores de SMS/e-mail (terceiros, ainda não escolhidos).
+**Fronteiras:** F1, e provedores de SMS/e-mail (terceiros, **ainda não escolhidos**; propostas: Twilio Verify ou
+Zenvia para SMS, SES ou Resend para e-mail).
 
-Todo o fluxo é **NAO IMPLEMENTADO**. A tabela abaixo registra as ameaças que o desenho precisa cobrir e o
-que a Fase 4.2 exige; nenhum item é controle existente.
+Fluxo implementado (`auth/recovery/`): `POST /v1/auth/recovery` (pedido), `POST /v1/auth/recovery/complete`
+(OTP(s) + nova senha), `GET|POST /v1/me/contacts`, `POST /v1/me/contacts/confirm`,
+`DELETE /v1/me/contact-changes/{id}`. Contrato em `contracts/openapi.yaml`, tabelas em `V5__recovery.sql`.
 
-| STRIDE | Ameaça | Mitigação existente | Residual / aberto |
+**Provedor de mensagens:** `MessageSender` é uma interface. O padrão de produção é `FailClosedMessageSender`,
+que recusa todo envio: o pedido segue respondendo o 202 genérico e o erro é logado sem dado pessoal, mas **nenhum
+OTP é entregue**, então a recuperação por canal externo não funciona em produção até existir provedor.
+`LoggingMessageSender` (dev) só registra que uma mensagem saiu; imprime destino e texto, que contém o OTP,
+somente com `MALHAVIVA_DEV_SHOW_OTP=true`.
+
+| STRIDE | Ameaça | Mitigação existente (verificada no código) | Residual / aberto |
 |---|---|---|---|
-| S | SIM swap: atacante recebe o OTP por SMS | Colunas `phone_verified_at` e `email_verified_at` existem no `V3` | Exigir ambos os canais, notificar o outro canal, espera de 24 h cancelável na troca de contato: NAO IMPLEMENTADO |
-| T | Troca de telefone/e-mail para sequestrar conta | Nenhuma | Senha + verificação do novo canal: NAO IMPLEMENTADO |
-| R | Titular nega ter pedido a recuperação | Nenhuma | Auditoria e notificação em toda recuperação: NAO IMPLEMENTADO |
-| I | Descobrir se um contato tem conta | Nenhuma | Respostas idênticas existindo ou não a conta: NAO IMPLEMENTADO |
-| D | SMS pumping (custo) e bloqueio de vítimas por excesso de tentativas | Nenhuma | Limite por DDI, CAPTCHA, teto diário de gasto, OTP de 6 dígitos, ≤ 10 min, uso único, 5 tentativas, guardado em hash: NAO IMPLEMENTADO |
-| E | Recuperação vira atalho para contornar 2FA | Nenhuma | TOTP opcional e obrigatório para admin: NAO IMPLEMENTADO |
+| S | SIM swap: atacante recebe o OTP por SMS | Com os dois canais verificados a conclusão exige os DOIS OTPs (`RecoveryService.allCodesValid`); o canal que não recebe OTP recebe aviso em todo pedido; a conclusão avisa todos os canais; troca de contato exige senha atual, OTP no novo canal e 24 h de espera cancelável, com aviso ao canal antigo no início, no cancelamento e na aplicação; concluir a recuperação cancela trocas pendentes; senha nova revoga todas as sessões e famílias de refresh | Conta com um único canal verificado fica exposta a SIM swap daquele canal (mitigação parcial: aviso ao outro canal, se houver contato gravado). A troca é aplicada de forma preguiçosa, na próxima leitura de contatos ou recuperação da conta: job periódico NAO IMPLEMENTADO. O aviso vai também a contato gravado e ainda não verificado |
+| T | Troca de telefone/e-mail para sequestrar conta | Senha atual (argon2id, limite de taxa por conta) + OTP no novo canal + espera de 24 h cancelável (`ContactService`); contato nunca é aplicado sem o OTP do novo canal; contato só vira único depois de verificado (índices parciais do V5) | Roubo do access token junto com a senha ainda permite iniciar a troca; o titular depende de ver o aviso nas 24 h |
+| R | Titular nega ter pedido a recuperação | Aviso em todo pedido e na conclusão; log operacional da conclusão, sem dado pessoal | Trilha de auditoria persistente de recuperação e troca de contato: NAO IMPLEMENTADO |
+| I | Descobrir se um handle ou contato tem conta | `POST /auth/recovery` responde sempre 202 com o mesmo corpo e cabeçalhos, exista ou não a conta, tenha ou não canal verificado; todo trabalho que depende da conta roda em segundo plano, então o caminho é o mesmo; `complete` responde o mesmo 400 `invalid_or_expired_code` para handle inexistente, OTP errado, vencido ou ausente (conta inexistente gasta um HMAC descartável); CAPTCHA e limites dependem só de IP e do texto do handle; o cadastro nunca acusa telefone ou e-mail já usados; contato já verificado por outra conta falha na confirmação com a mesma resposta genérica; `GET /me/contacts` devolve só flags; telefone e e-mail nunca vão a token, log ou resposta | Igualdade de **tempo** não foi medida: os caminhos fazem trabalho parecido, mas a conclusão de conta existente consulta o banco e a de conta inexistente não (diferença pequena, não testada). Contatos ficam em claro em `accounts` (criptografia em repouso depende do RDS) |
+| D | SMS pumping (custo) e bloqueio de vítimas por excesso de tentativas | OTP de 6 dígitos (`SecureRandom`), válido por no máximo 10 min, uso único, 5 tentativas e depois invalidado, guardado só como HMAC-SHA256 (chave `MALHAVIVA_OTP_KEY`; ausente derruba a subida), comparação em tempo constante; limites por DDI, por número ou e-mail (só o SHA-256 vira chave), por conta e por IP/handle; CAPTCHA exigido após 3 pedidos por IP ou handle em 1 h; teto diário de mensagens por canal (`MALHAVIVA_SMS_DAILY_CEILING`, padrão 500; `MALHAVIVA_EMAIL_DAILY_CEILING`, padrão 2000) com parada dura e alerta no log sem dado pessoal | Os limites por número, conta e DDI suprimem o envio em silêncio (a resposta continua 202); o CAPTCHA não depende deles para não vazar existência. **CAPTCHA real: NAO IMPLEMENTADO** (`NoopCaptchaVerifier`). Contadores, limitadores e teto diário só em memória de um nó (reiniciar zera o teto; vários nós multiplicam o limite). O alerta é uma linha de log, sem integração de alarme. Tabela de DDIs parcial (heurística de 1 a 3 dígitos). Rotação da chave do OTP: NAO IMPLEMENTADO. Quem sabe o handle pode gastar tentativas e SMS da vítima dentro dos limites (aceito) |
+| E | Recuperação vira atalho para contornar 2FA | Primitivas TOTP (RFC 6238: HMAC-SHA1, 30 s, 6 dígitos, janela de ±1 passo, o mesmo passo não vale duas vezes) validadas com os vetores de teste da RFC; segredo guardado cifrado (AES-GCM, chave derivada de `MALHAVIVA_OTP_KEY` e ligada à conta) e nunca logado | **TOTP não está ligado ao login nem exposto em rotas, e não existe papel `admin`**: obrigatoriedade para admin e flag `totpRequired`: NAO IMPLEMENTADO. A recuperação por OTP de SMS/e-mail não passa por TOTP (decisão aberta para quando o 2FA existir). Códigos de backup do TOTP: NAO IMPLEMENTADO |
 
-**Risco residual:** não avaliável enquanto o fluxo não existe. Decisão pendente: provedores de SMS e e-mail.
+**Verificação:** testes de unidade e de rota com repositórios em memória cobrem expiração, limite de tentativas,
+uso único, exigência dos dois canais, aviso ao outro canal, ausência de enumeração, revogação de sessões, espera
+de 24 h e cancelamento, limites de pumping e teto diário, vetores da RFC 6238 e ausência de OTP em log. Os
+repositórios JDBC e a migração `V5` **não foram exercitados contra Postgres** (`DatabaseIntegrationTest` depende
+de Docker e não foi executado).
+
+**Risco residual:** alto até existir provedor de mensagens (hoje a recuperação não entrega OTP em produção),
+CAPTCHA real e estado compartilhado entre nós. Decisão pendente: provedores de SMS e e-mail.
 
 ---
 
@@ -171,7 +191,7 @@ O admin web é **NAO IMPLEMENTADO**; nenhuma rota `/admin` existe no backend. Re
 
 | STRIDE | Ameaça | Mitigação existente | Residual / aberto |
 |---|---|---|---|
-| S | Conta de admin comprometida | Nenhuma | 2FA (TOTP) obrigatório, restrição por IP/VPN: NAO IMPLEMENTADO |
+| S | Conta de admin comprometida | Primitivas TOTP prontas (seção 3), ainda não ligadas ao login | 2FA (TOTP) obrigatório, restrição por IP/VPN: NAO IMPLEMENTADO |
 | T | Alteração indevida de rede/horários (afeta a validação `OFF_CORRIDOR` e o consenso) | Dados do corredor vêm de migrações versionadas (`V1__network.sql`) | Edição via admin com auditoria e revisão: NAO IMPLEMENTADO |
 | R | Admin nega uma alteração | Nenhuma | Trilha de auditoria imutável, sem dado pessoal desnecessário: NAO IMPLEMENTADO |
 | I | Admin enxerga dados pessoais além do necessário | Telemetria já é anônima; PII só no plano de identidade | Papéis com privilégio mínimo e mascaramento: NAO IMPLEMENTADO |
@@ -203,8 +223,8 @@ O admin web é **NAO IMPLEMENTADO**; nenhuma rota `/admin` existe no backend. Re
 1. Atestação real (Play Integrity e App Attest) e credenciais correspondentes. Sem isso a ingestão em produção permanece fechada.
 2. IP real do cliente atrás do balanceador (X-Forwarded-For confiável) antes de depender do rate limit por IP.
 3. Armazenamento persistente e compartilhado de tokens e nonces (ex. Valkey); usar ou remover a tabela `telemetry_nonces`.
-4. Hash argon2id com pepper, login com rate limit, refresh rotativo com detecção de reuso.
-5. Fluxo de recuperação (OTP, anti-SIM swap, anti-SMS pumping) e escolha de provedores.
+4. CAPTCHA real (login e recuperação), pepper e segredos em secret manager, estado de limites e tetos compartilhado entre nós.
+5. Escolha e integração dos provedores de SMS e e-mail (sem eles a recuperação não entrega OTP em produção), teste do V5 contra Postgres e job periódico para aplicar trocas de contato.
 6. Limiar mínimo de sinais para publicar trens e análise de reidentificação (RIPD).
 7. Detecção de mock location no cliente Android e na plataforma iOS.
 8. Lockfiles Gradle para dar efeito ao osv-scanner; ambiente de staging para o ZAP.

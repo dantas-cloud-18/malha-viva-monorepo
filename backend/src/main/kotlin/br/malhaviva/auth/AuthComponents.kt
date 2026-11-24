@@ -1,5 +1,6 @@
 package br.malhaviva.auth
 
+import br.malhaviva.auth.recovery.RecoveryComponents
 import br.malhaviva.tracking.ingest.RateLimiter
 
 private const val IP_CAPACITY = 20.0
@@ -23,4 +24,6 @@ class AuthComponents(
     val access: AccessTokenService,
     val limiters: AuthLimiters = AuthLimiters(),
     val clock: () -> Long = System::currentTimeMillis,
+    /** Recuperacao e contatos; null = desligada (rotas nao registradas). */
+    val recovery: RecoveryComponents? = null,
 )

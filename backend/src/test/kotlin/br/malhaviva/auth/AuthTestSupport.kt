@@ -52,6 +52,9 @@ class InMemoryAccountRepository : AccountRepository {
     override fun findByHandle(handle: String) = rows.values.firstOrNull { it.handle.equals(handle, ignoreCase = true) }
 
     @Synchronized
+    override fun findById(id: UUID) = rows[id]
+
+    @Synchronized
     override fun updatePasswordHash(
         accountId: UUID,
         passwordHash: String,
@@ -102,6 +105,14 @@ class InMemorySessionRepository : SessionRepository {
     ) {
         tokens.replaceAll { _, t -> if (t.familyId == familyId && t.revokedAt == null) t.copy(revokedAt = now) else t }
         revokedDevices += familyId
+    }
+
+    @Synchronized
+    override fun revokeAll(
+        accountId: UUID,
+        now: Instant,
+    ) {
+        devices.values.filter { it.accountId == accountId }.forEach { revokeFamily(it.id, now) }
     }
 
     @Synchronized

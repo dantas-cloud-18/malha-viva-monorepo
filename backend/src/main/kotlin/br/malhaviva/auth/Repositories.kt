@@ -18,6 +18,8 @@ interface AccountRepository {
 
     fun findByHandle(handle: String): AccountRecord?
 
+    fun findById(id: UUID): AccountRecord?
+
     fun updatePasswordHash(
         accountId: UUID,
         passwordHash: String,
@@ -65,6 +67,12 @@ interface SessionRepository {
     /** Revoga todos os tokens da familia e o dispositivo. */
     fun revokeFamily(
         familyId: UUID,
+        now: Instant,
+    )
+
+    /** Revoga todos os dispositivos e refresh tokens da conta (recuperacao de conta). */
+    fun revokeAll(
+        accountId: UUID,
         now: Instant,
     )
 

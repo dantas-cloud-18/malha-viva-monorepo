@@ -108,6 +108,9 @@ class SessionService(
         sessions.findToken(sha256Hex(rawToken))?.let { sessions.revokeFamily(it.familyId, now()) }
     }
 
+    /** Revoga todas as sessoes da conta. O access token em voo segue valido ate vencer (15 min). */
+    fun revokeAll(accountId: UUID) = sessions.revokeAll(accountId, now())
+
     fun listDevices(accountId: UUID): List<DeviceRecord> = sessions.listDevices(accountId)
 
     fun revokeDevice(

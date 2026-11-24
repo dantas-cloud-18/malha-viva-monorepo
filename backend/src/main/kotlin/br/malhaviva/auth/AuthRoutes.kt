@@ -1,5 +1,6 @@
 package br.malhaviva.auth
 
+import br.malhaviva.auth.recovery.recoveryRoutes
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
@@ -23,7 +24,7 @@ private const val BEARER = "Bearer "
 private class CreateAccountDto(
     val handle: String,
     val password: String,
-    // aceitos pelo contrato, ignorados nesta fase: canais de recuperacao (e verificacao) vem depois
+    // canais de recuperacao: gravados sem verificar e verificados por OTP quando a recuperacao esta ligada
     val phone: String? = null,
     val email: String? = null,
 )
@@ -69,21 +70,21 @@ private class AuthProblem(
     val detail: String? = null,
 )
 
-private suspend fun RoutingCall.problem(
+internal suspend fun RoutingCall.problem(
     status: HttpStatusCode,
     title: String,
     detail: String? = null,
 ) = respond(status, AuthProblem("about:blank", title, status.value, detail))
 
-private suspend fun RoutingCall.throttled(retryAfterSeconds: String = RETRY_AFTER_LIMIT_S) {
+internal suspend fun RoutingCall.throttled(retryAfterSeconds: String = RETRY_AFTER_LIMIT_S) {
     response.header(HttpHeaders.RetryAfter, retryAfterSeconds)
     problem(HttpStatusCode.TooManyRequests, "Too many requests")
 }
 
 /** Corpo invalido vira null (400); nunca propaga excecao com trecho do corpo. */
-private suspend inline fun <reified T : Any> RoutingCall.body(): T? = runCatching { receive<T>() }.getOrNull()
+internal suspend inline fun <reified T : Any> RoutingCall.body(): T? = runCatching { receive<T>() }.getOrNull()
 
-private fun RoutingCall.ip(): String = request.local.remoteAddress
+internal fun RoutingCall.ip(): String = request.local.remoteAddress
 
 /** Extrai e valida o access token. Sem token valido responde 401 e devolve null. */
 suspend fun RoutingCall.accountIdOrUnauthorized(
@@ -106,7 +107,9 @@ fun Route.authRoutes(c: AuthComponents) {
         when {
             !c.limiters.signup.tryAcquire("ip:${call.ip()}", c.clock()) -> call.throttled()
             dto == null -> call.problem(HttpStatusCode.BadRequest, "Malformed request")
-            else -> respondRegister(call, c.auth.register(dto.handle, dto.password), dto.handle)
+            c.recovery?.contacts?.validSignupContacts(dto.phone, dto.email) == false ->
+                call.problem(HttpStatusCode.BadRequest, "Invalid contact", "invalid_contact")
+            else -> registerAccount(call, c, dto)
         }
     }
     post("/auth/token") { loginRoute(call, c) }
@@ -133,6 +136,17 @@ fun Route.authRoutes(c: AuthComponents) {
         call.respond(HttpStatusCode.NoContent)
     }
     deviceRoutes(c)
+    c.recovery?.let { recoveryRoutes(c, it) }
+}
+
+private suspend fun registerAccount(
+    call: RoutingCall,
+    c: AuthComponents,
+    dto: CreateAccountDto,
+) {
+    val result = c.auth.register(dto.handle, dto.password)
+    if (result == RegisterResult.Created) c.recovery?.contacts?.registerContacts(dto.handle, dto.phone, dto.email)
+    respondRegister(call, result, dto.handle)
 }
 
 private suspend fun respondRegister(

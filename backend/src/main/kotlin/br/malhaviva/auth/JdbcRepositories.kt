@@ -29,6 +29,14 @@ class JdbcAccountRepository(
                 ) { rs -> AccountRecord(rs.uuid("account_id"), rs.getString("handle"), rs.getString("password_hash")) }
             }.firstOrNull()
 
+    override fun findById(id: UUID): AccountRecord? =
+        dataSource
+            .read {
+                it.queryList("SELECT account_id, handle, password_hash FROM accounts WHERE account_id = ?", id) { rs ->
+                    AccountRecord(rs.uuid("account_id"), rs.getString("handle"), rs.getString("password_hash"))
+                }
+            }.firstOrNull()
+
     override fun updatePasswordHash(
         accountId: UUID,
         passwordHash: String,
@@ -126,6 +134,20 @@ class JdbcSessionRepository(
         now: Instant,
     ) {
         dataSource.tx { it.revokeFamilyRows(familyId, now) }
+    }
+
+    override fun revokeAll(
+        accountId: UUID,
+        now: Instant,
+    ) {
+        dataSource.tx { c ->
+            c.update(
+                "UPDATE refresh_tokens SET revoked_at = ? WHERE account_id = ? AND revoked_at IS NULL",
+                now,
+                accountId,
+            )
+            c.update("UPDATE devices SET revoked_at = ? WHERE account_id = ? AND revoked_at IS NULL", now, accountId)
+        }
     }
 
     override fun listDevices(accountId: UUID): List<DeviceRecord> =

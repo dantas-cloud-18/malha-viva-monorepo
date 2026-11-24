@@ -59,7 +59,7 @@ paths:
       summary: Criar conta
       security: []
       description: >
-        Cria a conta. O @handle é público; telefone e e-mail são opcionais nesta fase (recuperação virá depois),
+        Cria a conta. O @handle é público; telefone e e-mail são opcionais, ficam sem verificação até confirmar o OTP do cadastro,
         só servem para recuperação e nunca são devolvidos a terceiros. Senha: NIST SP 800-63B (8 a 128
         caracteres, Unicode NFKC, sem regras de composição; recusa senhas vazadas e fracas).
       requestBody:
@@ -193,6 +193,157 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "204": { description: Dispositivo revogado e refresh da família invalidado. }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /auth/recovery:
+    post:
+      tags: [auth]
+      operationId: requestRecovery
+      summary: Pedir recuperação de conta
+      security: []
+      description: >
+        Sempre responde 202 com o mesmo corpo, exista ou não a conta, tenha ou não canal verificado
+        (mesmo status, corpo e classe de tempo). Se a conta existir, envia um OTP a cada canal verificado e
+        avisa o outro canal. Com os dois canais verificados, a conclusão exige os dois OTPs (anti-SIM swap).
+        CAPTCHA é exigido após poucos pedidos por IP ou handle.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [handle]
+              properties:
+                handle: { $ref: "#/components/schemas/Handle" }
+                captcha_token: { type: string }
+      responses:
+        "202":
+          description: Pedido aceito. Nada indica se a conta existe.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [accepted] }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403":
+          description: CAPTCHA exigido (ou inválido). Depende só de IP e handle informados, nunca da conta.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/recovery/complete:
+    post:
+      tags: [auth]
+      operationId: completeRecovery
+      summary: Concluir recuperação com OTP e nova senha
+      security: []
+      description: >
+        OTP de 6 dígitos, válido por até 10 minutos, uso único, 5 tentativas. Exige o OTP de cada canal
+        verificado. A nova senha segue a mesma política do cadastro. Em caso de sucesso revoga todas as
+        sessões e famílias de refresh, cancela trocas de contato pendentes e notifica os canais.
+        Handle inexistente, OTP errado, expirado ou ausente respondem igual (400 invalid_or_expired_code).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [handle, new_password]
+              properties:
+                handle: { $ref: "#/components/schemas/Handle" }
+                phone_code: { type: string, pattern: "^[0-9]{6}$" }
+                email_code: { type: string, pattern: "^[0-9]{6}$" }
+                new_password: { type: string, minLength: 8, maxLength: 128 }
+      responses:
+        "204": { description: Senha trocada; todas as sessões revogadas. }
+        "400": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /me/contacts:
+    get:
+      tags: [auth]
+      operationId: getContacts
+      summary: Estado dos contatos de recuperação
+      description: Só flags e trocas pendentes. Telefone e e-mail nunca são devolvidos.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Estado dos contatos da própria conta.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContactsState" }
+        "401": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [auth]
+      operationId: setContact
+      summary: Cadastrar, verificar de novo ou trocar um contato
+      security:
+        - bearerAuth: []
+      description: >
+        Canal ainda não verificado: grava o valor e envia OTP ao canal (202, sem `change_id`).
+        Canal já verificado (troca): exige a senha atual, envia OTP ao NOVO canal, avisa o canal antigo e
+        só aplica após 24 h, prazo em que o titular pode cancelar (DELETE /me/contact-changes/{changeId}).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetContactRequest" }
+      responses:
+        "202":
+          description: OTP enviado ao canal informado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContactChangeStarted" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403":
+          description: Senha atual incorreta ou ausente numa troca.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /me/contacts/confirm:
+    post:
+      tags: [auth]
+      operationId: confirmContact
+      summary: Confirmar o OTP de um contato
+      security:
+        - bearerAuth: []
+      description: >
+        Sem `change_id` verifica o contato gravado. Com `change_id` confirma o novo canal de uma troca; a
+        troca só é aplicada após as 24 h de espera.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfirmContactRequest" }
+      responses:
+        "204": { description: Confirmado. }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /me/contact-changes/{changeId}:
+    delete:
+      tags: [auth]
+      operationId: cancelContactChange
+      summary: Cancelar uma troca de contato pendente
+      description: Troca de outra conta responde 404, igual a inexistente (sem IDOR).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: changeId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Troca cancelada; o canal antigo é avisado. }
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
 
@@ -431,6 +582,50 @@ components:
           properties:
             phone: { type: boolean }
             email: { type: boolean }
+    ContactChannel:
+      type: string
+      enum: [phone, email]
+    SetContactRequest:
+      type: object
+      required: [channel, value]
+      properties:
+        channel: { $ref: "#/components/schemas/ContactChannel" }
+        value: { type: string, maxLength: 254, description: "Telefone em E.164 ou e-mail, conforme o canal." }
+        current_password: { type: string, description: Obrigatória na troca de um canal já verificado. }
+    ContactChangeStarted:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [verification_sent, change_pending] }
+        change_id: { type: string, format: uuid }
+        effective_at: { type: string, format: date-time }
+    ConfirmContactRequest:
+      type: object
+      required: [channel, code]
+      properties:
+        channel: { $ref: "#/components/schemas/ContactChannel" }
+        code: { type: string, pattern: "^[0-9]{6}$" }
+        change_id: { type: string, format: uuid }
+    ContactsState:
+      type: object
+      required: [contacts_verified, pending_changes]
+      properties:
+        contacts_verified:
+          type: object
+          required: [phone, email]
+          properties:
+            phone: { type: boolean }
+            email: { type: boolean }
+        pending_changes:
+          type: array
+          items:
+            type: object
+            required: [id, channel, effective_at, confirmed]
+            properties:
+              id: { type: string, format: uuid }
+              channel: { $ref: "#/components/schemas/ContactChannel" }
+              effective_at: { type: string, format: date-time }
+              confirmed: { type: boolean }
     TokenPair:
       type: object
       required: [access_token, refresh_token, expires_in]
