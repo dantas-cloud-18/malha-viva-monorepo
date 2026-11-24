@@ -167,8 +167,9 @@ paths:
       description: >
         Lote de amostras de um aparelho. O aparelho já descartou pontos fora do corredor e cortou
         início e fim da viagem. Assinatura: HMAC-SHA256 sobre
-        "{X-Timestamp}\n{X-Nonce}\n{sha256(corpo)}" com a chave do token. Timestamp com tolerância de 60 s;
-        nonce de uso único.
+        "{X-Timestamp}\n{X-Nonce}\n{sha256(corpo)}" com a chave do token. sha256(corpo) é o hash dos bytes
+        do corpo em hexadecimal minúsculo; a assinatura é o HMAC em base64url sem padding ("=").
+        Timestamp com tolerância de 60 s; nonce de uso único. Assinatura inválida não consome o nonce.
       parameters:
         - in: header
           name: X-Timestamp
