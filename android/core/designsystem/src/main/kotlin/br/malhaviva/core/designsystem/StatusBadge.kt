@@ -57,7 +57,7 @@ fun StatusBadge(
     }
 }
 
-private fun DrawScope.drawGlyph(
+internal fun DrawScope.drawGlyph(
     status: TrainStatus,
     color: Color,
 ) {
