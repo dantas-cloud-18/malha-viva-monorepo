@@ -170,6 +170,10 @@ paths:
         "{X-Timestamp}\n{X-Nonce}\n{sha256(corpo)}" com a chave do token. sha256(corpo) é o hash dos bytes
         do corpo em hexadecimal minúsculo; a assinatura é o HMAC em base64url sem padding ("=").
         Timestamp com tolerância de 60 s; nonce de uso único. Assinatura inválida não consome o nonce.
+        O token vai em `Authorization: Bearer` e `anon_epoch_id` deve ser o do token (senão 400). Token
+        ausente, desconhecido ou expirado e assinatura inválida respondem 401. Corpo acima de 128 KiB, campo
+        desconhecido ou fora do esquema, e timestamp fora da tolerância respondem 400. Limite de taxa por
+        token e por IP responde 429.
       parameters:
         - in: header
           name: X-Timestamp
