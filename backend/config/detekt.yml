@@ -1,0 +1,11 @@
+naming:
+  MatchingDeclarationName:
+    active: false
+complexity:
+  NestedBlockDepth:
+    excludes: ['**/test/**']
+style:
+  MagicNumber:
+    ignorePropertyDeclaration: true
+    ignoreNamedArgument: true
+    ignoreNumbers: ['-1', '0', '1', '2', '500']

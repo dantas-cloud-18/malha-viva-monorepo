@@ -23,7 +23,7 @@ import javax.sql.DataSource
 private val log = LoggerFactory.getLogger("br.malhaviva.Application")
 
 fun main() {
-    val port = System.getenv("PORT")?.toInt() ?: 8080
+    val port = System.getenv("PORT")?.toInt() ?: DEFAULT_PORT
     embeddedServer(Netty, port = port) {
         module(Database.connect(DatabaseConfig.fromEnv()))
     }.start(wait = true)
@@ -57,3 +57,5 @@ data class Problem(
     val title: String,
     val status: Int,
 )
+
+private const val DEFAULT_PORT = 8080

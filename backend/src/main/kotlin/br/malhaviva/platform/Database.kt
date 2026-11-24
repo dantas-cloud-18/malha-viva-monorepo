@@ -30,7 +30,7 @@ object Database {
                 jdbcUrl = config.url
                 username = config.user
                 password = config.password
-                maximumPoolSize = 10
+                maximumPoolSize = MAX_POOL_SIZE
             },
         )
 
@@ -42,3 +42,5 @@ object Database {
             .migrate()
     }
 }
+
+private const val MAX_POOL_SIZE = 10

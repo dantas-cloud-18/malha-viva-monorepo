@@ -29,10 +29,12 @@ class PartitionMaintenance(
     fun start() {
         scheduler.scheduleAtFixedRate({
             runCatching { runOnce() }.onFailure { log.error("Partition maintenance failed", it) }
-        }, 0, 15, TimeUnit.MINUTES)
+        }, 0, INTERVAL_MINUTES, TimeUnit.MINUTES)
     }
 
     fun stop() {
         scheduler.shutdownNow()
     }
 }
+
+private const val INTERVAL_MINUTES = 15L
