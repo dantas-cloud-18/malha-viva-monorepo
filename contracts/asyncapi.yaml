@@ -1,0 +1,115 @@
+asyncapi: 3.0.0
+info:
+  title: Malha Viva Realtime
+  version: 0.1.0
+  description: >
+    Canal público de posição dos trens e ETA do Ramal Santa Cruz. Sem identidade de usuário.
+    A conexão usa o ticket de POST /v1/realtime/tickets na primeira mensagem, nunca na URL.
+    O servidor manda posição, velocidade e timestamp; o cliente anima e extrapola.
+
+servers:
+  production:
+    host: stream.malhaviva.example
+    pathname: /v1/ws
+    protocol: wss
+
+channels:
+  stream:
+    address: /v1/ws
+    messages:
+      auth: { $ref: "#/components/messages/Auth" }
+      subscribe: { $ref: "#/components/messages/Subscribe" }
+      trainState: { $ref: "#/components/messages/TrainState" }
+      eta: { $ref: "#/components/messages/Eta" }
+      error: { $ref: "#/components/messages/Error" }
+
+operations:
+  sendAuth:
+    action: receive
+    channel: { $ref: "#/channels/stream" }
+    messages: [{ $ref: "#/channels/stream/messages/auth" }]
+  sendSubscribe:
+    action: receive
+    channel: { $ref: "#/channels/stream" }
+    messages: [{ $ref: "#/channels/stream/messages/subscribe" }]
+  pushTrainState:
+    action: send
+    channel: { $ref: "#/channels/stream" }
+    messages: [{ $ref: "#/channels/stream/messages/trainState" }]
+  pushEta:
+    action: send
+    channel: { $ref: "#/channels/stream" }
+    messages: [{ $ref: "#/channels/stream/messages/eta" }]
+  pushError:
+    action: send
+    channel: { $ref: "#/channels/stream" }
+    messages: [{ $ref: "#/channels/stream/messages/error" }]
+
+components:
+  messages:
+    Auth:
+      summary: Primeira mensagem do cliente. Sem ela em 5 s, o servidor fecha a conexão.
+      payload:
+        type: object
+        required: [action, ticket]
+        properties:
+          action: { const: AUTH }
+          ticket: { type: string }
+    Subscribe:
+      payload:
+        type: object
+        required: [action, channels]
+        properties:
+          action: { const: SUBSCRIBE }
+          channels:
+            type: array
+            maxItems: 10
+            items:
+              type: string
+              description: "trains:{corridor}:{direction} ou eta:{corridor}:{direction}:{station_id}"
+    TrainState:
+      summary: Enviado só com mudança relevante (estação, pausa, desvio de posição).
+      payload:
+        type: object
+        required: [event, train_id, corridor, direction, ts, km, speed_mps, state, consensus_devices, confidence]
+        properties:
+          event: { const: TRAIN_STATE }
+          train_id: { type: string, description: "ID do cluster, efêmero." }
+          corridor: { type: string }
+          direction: { type: string, enum: [SANTA_CRUZ_TO_CENTRAL, CENTRAL_TO_SANTA_CRUZ] }
+          ts: { type: string, format: date-time }
+          km: { type: number, description: Posição linear na via. }
+          speed_mps: { type: number }
+          state: { type: string, enum: [MOVING, AT_STATION, PAUSED_ON_TRACK, SCHEDULED] }
+          last_station_id: { type: string }
+          consensus_devices: { type: integer, minimum: 0 }
+          confidence: { type: number, minimum: 0, maximum: 1 }
+    Eta:
+      summary: Publicado quando o ETA muda 15 s ou mais.
+      payload:
+        type: object
+        required: [event, corridor, direction, station_id, arrivals]
+        properties:
+          event: { const: ETA }
+          corridor: { type: string }
+          direction: { type: string }
+          station_id: { type: string }
+          arrivals:
+            type: array
+            items:
+              type: object
+              required: [train_id, eta, state, confidence, source]
+              properties:
+                train_id: { type: string }
+                eta: { type: string, format: date-time }
+                state: { type: string, enum: [MOVING, AT_STATION, PAUSED_ON_TRACK, SCHEDULED] }
+                confidence: { type: number }
+                source: { type: string, enum: [LIVE, SCHEDULE] }
+                delay_reason: { type: string, enum: [ON_TIME, PAUSED_ON_TRACK, CONGESTION] }
+    Error:
+      payload:
+        type: object
+        required: [event, code]
+        properties:
+          event: { const: ERROR }
+          code: { type: string, enum: [UNAUTHORIZED, TICKET_EXPIRED, BAD_REQUEST, RATE_LIMITED] }

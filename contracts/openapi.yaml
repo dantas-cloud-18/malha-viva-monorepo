@@ -1,0 +1,389 @@
+openapi: 3.1.0
+info:
+  title: Malha Viva API
+  version: 0.1.0
+  description: >
+    Contrato da V1 (Ramal Santa Cruz). Dois planos separados: conta (identificada por @handle)
+    e telemetria (anônima, sem vínculo com a conta).
+servers:
+  - url: https://api.malhaviva.example/v1
+    description: Placeholder até a definição do domínio.
+
+tags:
+  - name: health
+  - name: network
+    description: Dados públicos da malha (estações, trechos).
+  - name: auth
+  - name: telemetry
+    description: Ingestão anônima. Nunca recebe token de conta.
+  - name: realtime
+
+paths:
+  /health:
+    get:
+      tags: [health]
+      operationId: health
+      summary: Saúde do serviço
+      security: []
+      responses:
+        "200":
+          description: Serviço no ar.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [ok] }
+
+  /network/corridors/{corridor}:
+    get:
+      tags: [network]
+      operationId: getCorridor
+      summary: Malha do corredor
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/Corridor"
+      responses:
+        "200":
+          description: Estações e trechos do corredor, com geometria em GeoJSON.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CorridorNetwork" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /auth/accounts:
+    post:
+      tags: [auth]
+      operationId: createAccount
+      summary: Criar conta
+      security: []
+      description: >
+        Cria a conta. O @handle é público; telefone e e-mail só servem para recuperação e nunca são
+        devolvidos a terceiros. Verificação dos contatos, regras de senha e idade: Fases 4 e 5.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAccountRequest" }
+      responses:
+        "201":
+          description: Conta criada; contatos pendentes de verificação.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "409":
+          description: Handle indisponível. Nunca informa se telefone ou e-mail já existem.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+
+  /auth/token:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Entrar
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [handle, password]
+              properties:
+                handle: { $ref: "#/components/schemas/Handle" }
+                password: { type: string, minLength: 8, maxLength: 128 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+          description: Tokens emitidos.
+        "401":
+          description: Mensagem genérica, sem dizer se o handle existe.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refresh
+      summary: Renovar tokens
+      security: []
+      description: Refresh rotativo. Reuso de um refresh antigo revoga toda a família de tokens.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+          description: Novo par de tokens.
+        "401": { $ref: "#/components/responses/Problem" }
+
+  /telemetry/tokens:
+    post:
+      tags: [telemetry]
+      operationId: issueTelemetryToken
+      summary: Emitir token anônimo
+      security: []
+      description: >
+        Emite token anônimo curto para uma viagem, só para cliente atestado
+        (Play Integrity ou App Attest). Não aceita nem grava token de conta.
+      parameters:
+        - $ref: "#/components/parameters/Attestation"
+        - $ref: "#/components/parameters/Platform"
+      responses:
+        "201":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TelemetryToken" }
+          description: Token anônimo emitido.
+        "403":
+          description: Cliente não atestado.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /telemetry/batches:
+    post:
+      tags: [telemetry]
+      operationId: ingestBatch
+      summary: Enviar lote de telemetria
+      security:
+        - telemetryToken: []
+      description: >
+        Lote de amostras de um aparelho. O aparelho já descartou pontos fora do corredor e cortou
+        início e fim da viagem. Assinatura: HMAC-SHA256 sobre
+        "{X-Timestamp}\n{X-Nonce}\n{sha256(corpo)}" com a chave do token. Timestamp com tolerância de 60 s;
+        nonce de uso único.
+      parameters:
+        - in: header
+          name: X-Timestamp
+          required: true
+          schema: { type: integer, format: int64, description: Epoch em milissegundos. }
+        - in: header
+          name: X-Nonce
+          required: true
+          schema: { type: string, minLength: 16, maxLength: 64 }
+        - in: header
+          name: X-Signature
+          required: true
+          schema: { type: string, description: Base64url do HMAC. }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TelemetryBatch" }
+      responses:
+        "202":
+          description: Lote recebido. Amostras implausíveis são descartadas, com contagem por motivo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BatchResult" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409":
+          description: Nonce já usado (replay).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /realtime/tickets:
+    post:
+      tags: [realtime]
+      operationId: issueRealtimeTicket
+      summary: Emitir ticket do WebSocket
+      security: []
+      description: >
+        Ticket de uso único (30 s) para abrir o WebSocket sem token na URL. Leitura pública dos trens;
+        sem identidade. Contrato do canal em asyncapi.yaml.
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ticket, expires_at, url]
+                properties:
+                  ticket: { type: string }
+                  expires_at: { type: string, format: date-time }
+                  url: { type: string, format: uri }
+          description: Ticket emitido.
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    telemetryToken:
+      type: http
+      scheme: bearer
+      description: Token anônimo de /telemetry/tokens. Nunca o token de conta.
+
+  parameters:
+    Corridor:
+      in: path
+      name: corridor
+      required: true
+      schema: { $ref: "#/components/schemas/Corridor" }
+    Attestation:
+      in: header
+      name: X-Attestation
+      required: true
+      schema: { type: string, description: Token do Play Integrity ou asserção do App Attest. }
+    Platform:
+      in: header
+      name: X-Platform
+      required: true
+      schema: { type: string, enum: [android, ios] }
+
+  responses:
+    Problem:
+      description: Erro (RFC 9457).
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    TooManyRequests:
+      description: Limite excedido.
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+
+  schemas:
+    Corridor:
+      type: string
+      enum: [RAMAL_SANTA_CRUZ]
+    Direction:
+      type: string
+      enum: [SANTA_CRUZ_TO_CENTRAL, CENTRAL_TO_SANTA_CRUZ]
+    Handle:
+      type: string
+      pattern: "^@[a-zA-Z0-9_]{3,20}$"
+      description: Comparado sem diferenciar maiúsculas.
+
+    CreateAccountRequest:
+      type: object
+      required: [handle, password, phone, email]
+      properties:
+        handle: { $ref: "#/components/schemas/Handle" }
+        password: { type: string, minLength: 8, maxLength: 128 }
+        phone: { type: string, pattern: "^\\+[1-9][0-9]{7,14}$", description: E.164. }
+        email: { type: string, format: email, maxLength: 254 }
+    Account:
+      type: object
+      required: [handle, contacts_verified]
+      properties:
+        handle: { $ref: "#/components/schemas/Handle" }
+        contacts_verified:
+          type: object
+          required: [phone, email]
+          properties:
+            phone: { type: boolean }
+            email: { type: boolean }
+    TokenPair:
+      type: object
+      required: [access_token, refresh_token, expires_in]
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        expires_in: { type: integer, description: Segundos. }
+
+    TelemetryToken:
+      type: object
+      required: [token, signing_key, anon_epoch_id, expires_at]
+      properties:
+        token: { type: string }
+        signing_key: { type: string, description: "Chave HMAC do token, em base64url." }
+        anon_epoch_id: { type: string, description: "ID efêmero, troca a cada token." }
+        expires_at: { type: string, format: date-time }
+
+    TelemetryBatch:
+      type: object
+      required: [anon_epoch_id, corridor, samples]
+      additionalProperties: false
+      properties:
+        anon_epoch_id: { type: string }
+        corridor: { $ref: "#/components/schemas/Corridor" }
+        samples:
+          type: array
+          minItems: 1
+          maxItems: 120
+          items: { $ref: "#/components/schemas/Sample" }
+    Sample:
+      type: object
+      required: [seq, ts, lat, lon, accuracy_m]
+      additionalProperties: false
+      properties:
+        seq: { type: integer, minimum: 0 }
+        ts: { type: string, format: date-time }
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lon: { type: number, minimum: -180, maximum: 180 }
+        accuracy_m: { type: number, minimum: 0 }
+        speed_mps: { type: number, minimum: 0 }
+        bearing_deg: { type: number, minimum: 0, exclusiveMaximum: 360 }
+        motion_state: { type: string, enum: [MOVING, STATIONARY, UNKNOWN] }
+        mock_location: { type: boolean, description: Sinal do sistema; true descarta a amostra. }
+    BatchResult:
+      type: object
+      required: [accepted, rejected]
+      properties:
+        accepted: { type: integer }
+        rejected:
+          type: object
+          additionalProperties: { type: integer }
+          description: "Contagem por motivo: ACCURACY, OFF_CORRIDOR, IMPLAUSIBLE_SPEED, MOCK, DUPLICATE, STALE."
+
+    CorridorNetwork:
+      type: object
+      required: [corridor, stations, segments]
+      properties:
+        corridor: { $ref: "#/components/schemas/Corridor" }
+        stations:
+          type: array
+          items:
+            type: object
+            required: [station_id, name, seq_order, km, platform]
+            properties:
+              station_id: { type: string }
+              name: { type: string }
+              seq_order: { type: integer }
+              km: { type: number }
+              platform: { type: object, description: GeoJSON Polygon. }
+        segments:
+          type: array
+          items:
+            type: object
+            required: [segment_id, from_station_id, to_station_id, line]
+            properties:
+              segment_id: { type: string }
+              from_station_id: { type: string }
+              to_station_id: { type: string }
+              line: { type: object, description: GeoJSON LineString. }
+
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
