@@ -85,17 +85,21 @@ class DatabaseIntegrationTest {
         val forbidden = Regex("user|account|handle|phone|email|ip_|device_model|session")
         dataSource.connection.use { conn ->
             conn.createStatement().use { st ->
-                st.executeQuery(
-                    """
-                    SELECT table_name, column_name FROM information_schema.columns
-                    WHERE table_schema = 'public' AND table_name IN ('telemetry_points', 'train_events')
-                    """.trimIndent(),
-                ).use { rs ->
-                    while (rs.next()) {
-                        val column = rs.getString(2)
-                        assertTrue(!forbidden.containsMatchIn(column), "${rs.getString(1)}.$column looks like identity")
+                st
+                    .executeQuery(
+                        """
+                        SELECT table_name, column_name FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name IN ('telemetry_points', 'train_events')
+                        """.trimIndent(),
+                    ).use { rs ->
+                        while (rs.next()) {
+                            val column = rs.getString(2)
+                            assertTrue(
+                                !forbidden.containsMatchIn(column),
+                                "${rs.getString(1)}.$column looks like identity",
+                            )
+                        }
                     }
-                }
             }
         }
     }

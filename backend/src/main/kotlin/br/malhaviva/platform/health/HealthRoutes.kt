@@ -8,7 +8,9 @@ import kotlinx.serialization.Serializable
 import javax.sql.DataSource
 
 @Serializable
-data class Health(val status: String)
+data class Health(
+    val status: String,
+)
 
 fun Route.healthRoutes(dataSource: DataSource) {
     get("/health") {

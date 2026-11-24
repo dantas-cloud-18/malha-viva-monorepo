@@ -52,4 +52,8 @@ fun Application.module(dataSource: DataSource) {
 }
 
 @Serializable
-data class Problem(val type: String, val title: String, val status: Int)
+data class Problem(
+    val type: String,
+    val title: String,
+    val status: Int,
+)

@@ -5,7 +5,11 @@ import com.zaxxer.hikari.HikariDataSource
 import org.flywaydb.core.Flyway
 import javax.sql.DataSource
 
-data class DatabaseConfig(val url: String, val user: String, val password: String) {
+data class DatabaseConfig(
+    val url: String,
+    val user: String,
+    val password: String,
+) {
     companion object {
         fun fromEnv(): DatabaseConfig =
             DatabaseConfig(
@@ -31,6 +35,10 @@ object Database {
         )
 
     fun migrate(dataSource: DataSource) {
-        Flyway.configure().dataSource(dataSource).load().migrate()
+        Flyway
+            .configure()
+            .dataSource(dataSource)
+            .load()
+            .migrate()
     }
 }

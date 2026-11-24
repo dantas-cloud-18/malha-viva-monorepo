@@ -11,7 +11,10 @@ class PartitionMaintenance(
     private val retentionHours: Int = 24,
 ) {
     private val log = LoggerFactory.getLogger(PartitionMaintenance::class.java)
-    private val scheduler = Executors.newSingleThreadScheduledExecutor { Thread(it, "partition-maintenance").apply { isDaemon = true } }
+    private val scheduler =
+        Executors.newSingleThreadScheduledExecutor { task ->
+            Thread(task, "partition-maintenance").also { it.isDaemon = true }
+        }
 
     fun runOnce() {
         dataSource.connection.use { conn ->
