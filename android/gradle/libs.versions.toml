@@ -9,6 +9,7 @@ lifecycle = "2.11.1"
 coroutines = "1.11.0"
 turbine = "1.2.1"
 junit = "4.13.2"
+playServicesLocation = "21.4.0"
 ktlintGradle = "14.2.0"
 detekt = "1.23.8"
 
@@ -24,6 +25,7 @@ coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-androi
 coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
 junit = { module = "junit:junit", version.ref = "junit" }
+play-services-location = { module = "com.google.android.gms:play-services-location", version.ref = "playServicesLocation" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
