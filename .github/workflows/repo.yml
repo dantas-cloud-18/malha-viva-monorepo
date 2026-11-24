@@ -9,3 +9,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sh scripts/check-env-example.sh
+      - run: python3 scripts/check_tokens.py contracts/brand-tokens.json android/core/designsystem/src/main/kotlin/br/malhaviva/core/designsystem/MalhaVivaColors.kt
