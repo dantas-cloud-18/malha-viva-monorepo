@@ -49,3 +49,7 @@ GoogleService-Info.plist
 .omc/
 
 ios/*.xcodeproj/
+.terraform/
+*.tfstate*
+*.tfvars
+!.terraform.lock.hcl
