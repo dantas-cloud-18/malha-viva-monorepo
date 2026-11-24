@@ -15,20 +15,20 @@ CREATE TABLE telemetry_points (
 
 CREATE INDEX telemetry_points_time_idx ON telemetry_points (corridor_id, recorded_at);
 
--- Cria partições diárias à frente e apaga as mais antigas que a retenção.
+-- Partições por hora (UTC): a partição sai inteira quando sua hora final passa da retenção,
+-- então nenhum ponto vive mais que retenção + 1 h.
 -- Chamada pelo backend a cada hora; não depende de pg_cron nem pg_partman.
-CREATE FUNCTION telemetry_maintain_partitions(retention interval, days_ahead int DEFAULT 2)
+CREATE FUNCTION telemetry_maintain_partitions(retention interval, hours_ahead int DEFAULT 3)
 RETURNS void LANGUAGE plpgsql AS $$
 DECLARE
-    d     date;
-    part  record;
-    limit_day date := (now() - retention)::date;
+    h    timestamptz;
+    part record;
 BEGIN
-    FOR i IN 0..days_ahead LOOP
-        d := current_date + i;
+    FOR i IN 0..hours_ahead LOOP
+        h := date_trunc('hour', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' + make_interval(hours => i);
         EXECUTE format(
             'CREATE TABLE IF NOT EXISTS %I PARTITION OF telemetry_points FOR VALUES FROM (%L) TO (%L)',
-            'telemetry_points_' || to_char(d, 'YYYYMMDD'), d, d + 1);
+            'telemetry_points_' || to_char(h AT TIME ZONE 'UTC', 'YYYYMMDDHH24'), h, h + interval '1 hour');
     END LOOP;
 
     FOR part IN
@@ -36,14 +36,15 @@ BEGIN
         FROM pg_inherits i
         JOIN pg_class c ON c.oid = i.inhrelid
         WHERE i.inhparent = 'telemetry_points'::regclass
-          AND to_date(right(c.relname, 8), 'YYYYMMDD') < limit_day
+          AND (to_timestamp(right(c.relname, 10), 'YYYYMMDDHH24')::timestamp AT TIME ZONE 'UTC') + interval '1 hour'
+              <= now() - retention
     LOOP
         EXECUTE format('DROP TABLE %I', part.relname);
     END LOOP;
 END;
 $$;
 
-SELECT telemetry_maintain_partitions(interval '30 days');
+SELECT telemetry_maintain_partitions(interval '24 hours');
 
 -- Nonce de uso único para anti-replay (janela de 60 s; o backend apaga os vencidos).
 CREATE TABLE telemetry_nonces (
