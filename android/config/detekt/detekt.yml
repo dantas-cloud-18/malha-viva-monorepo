@@ -4,3 +4,5 @@ style:
 naming:
   FunctionNaming:
     ignoreAnnotated: ['Composable']
+  MatchingDeclarationName:
+    active: false

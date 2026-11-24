@@ -11,4 +11,6 @@ dependencies {
     api(platform(libs.compose.bom))
     api(libs.compose.material3)
     implementation(libs.compose.ui)
+
+    testImplementation(libs.junit)
 }
