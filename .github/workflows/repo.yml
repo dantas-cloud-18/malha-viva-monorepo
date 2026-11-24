@@ -1,0 +1,11 @@
+name: repo
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  env-example:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh scripts/check-env-example.sh
