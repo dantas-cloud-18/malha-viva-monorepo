@@ -22,6 +22,7 @@ dependencies {
     implementation(libs.ktor.server.netty)
     implementation(libs.ktor.server.content.negotiation)
     implementation(libs.ktor.server.status.pages)
+    implementation(libs.ktor.server.sse)
     implementation(libs.ktor.serialization.json)
     implementation(libs.flyway.core)
     implementation(libs.flyway.postgresql)

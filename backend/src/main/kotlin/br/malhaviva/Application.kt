@@ -4,6 +4,8 @@ import br.malhaviva.platform.Database
 import br.malhaviva.platform.DatabaseConfig
 import br.malhaviva.platform.health.healthRoutes
 import br.malhaviva.tracking.ingest.PartitionMaintenance
+import br.malhaviva.tracking.live.LiveHub
+import br.malhaviva.tracking.live.liveRoutes
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
@@ -16,6 +18,7 @@ import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.response.respond
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
+import io.ktor.server.sse.SSE
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 import javax.sql.DataSource
@@ -29,7 +32,10 @@ fun main() {
     }.start(wait = true)
 }
 
-fun Application.module(dataSource: DataSource) {
+fun Application.module(
+    dataSource: DataSource,
+    liveHub: LiveHub = LiveHub(),
+) {
     Database.migrate(dataSource)
 
     val maintenance = PartitionMaintenance(dataSource)
@@ -37,6 +43,7 @@ fun Application.module(dataSource: DataSource) {
     monitor.subscribe(ApplicationStopped) { maintenance.stop() }
 
     install(ContentNegotiation) { json() }
+    install(SSE)
     install(StatusPages) {
         exception<Throwable> { call, cause ->
             log.error("Unhandled error on {}", call.request.local.uri, cause)
@@ -47,6 +54,7 @@ fun Application.module(dataSource: DataSource) {
     routing {
         route("/v1") {
             healthRoutes(dataSource)
+            liveRoutes(liveHub)
         }
     }
 }
