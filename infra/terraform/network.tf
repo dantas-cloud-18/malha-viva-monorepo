@@ -80,13 +80,16 @@ resource "aws_security_group" "alb" {
     cidr_blocks = ["0.0.0.0/0"]
   }
   egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    description = "ALB para as tarefas na porta da aplicacao (somente dentro da VPC)"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = [aws_vpc.main.cidr_block]
   }
 }
 
+# Saida 443 aberta e intencional: Fargate sem VPC endpoints precisa alcancar ECR e Secrets Manager.
+# trivy:ignore:AVD-AWS-0104
 resource "aws_security_group" "app" {
   name_prefix = "mv-app-"
   vpc_id      = aws_vpc.main.id
@@ -97,10 +100,25 @@ resource "aws_security_group" "app" {
     security_groups = [aws_security_group.alb.id]
   }
   egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    description = "Postgres dentro da VPC"
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = [aws_vpc.main.cidr_block]
+  }
+  egress {
+    description = "Valkey dentro da VPC"
+    from_port   = 6379
+    to_port     = 6379
+    protocol    = "tcp"
+    cidr_blocks = [aws_vpc.main.cidr_block]
+  }
+  egress {
+    description = "HTTPS de saida via NAT: ECR, Secrets Manager e logs"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] # trivy:ignore:AVD-AWS-0104
   }
 }
 
