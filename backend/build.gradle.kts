@@ -29,6 +29,8 @@ dependencies {
     implementation(libs.postgresql)
     implementation(libs.hikari)
     implementation(libs.logback)
+    implementation(libs.bouncycastle)
+    implementation(libs.zxcvbn)
 
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test)

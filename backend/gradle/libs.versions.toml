@@ -8,6 +8,8 @@ logback = "1.6.8"
 testcontainers = "2.0.5"
 ktlint-gradle = "14.2.0"
 detekt = "1.23.8"
+bouncycastle = "1.87"
+zxcvbn = "1.9.0"
 
 [libraries]
 ktor-server-core = { module = "io.ktor:ktor-server-core-jvm", version.ref = "ktor" }
@@ -23,6 +25,8 @@ postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" 
 hikari = { module = "com.zaxxer:HikariCP", version.ref = "hikari" }
 logback = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql", version.ref = "testcontainers" }
+bouncycastle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
+zxcvbn = { module = "com.nulab-inc:zxcvbn", version.ref = "zxcvbn" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test-junit5", version.ref = "kotlin" }
 
 [plugins]

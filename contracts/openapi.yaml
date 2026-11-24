@@ -59,8 +59,9 @@ paths:
       summary: Criar conta
       security: []
       description: >
-        Cria a conta. O @handle é público; telefone e e-mail só servem para recuperação e nunca são
-        devolvidos a terceiros. Verificação dos contatos, regras de senha e idade: Fases 4 e 5.
+        Cria a conta. O @handle é público; telefone e e-mail são opcionais nesta fase (recuperação virá depois),
+        só servem para recuperação e nunca são devolvidos a terceiros. Senha: NIST SP 800-63B (8 a 128
+        caracteres, Unicode NFKC, sem regras de composição; recusa senhas vazadas e fracas).
       requestBody:
         required: true
         content:
@@ -73,6 +74,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Account" }
         "400": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "409":
           description: Handle indisponível. Nunca informa se telefone ou e-mail já existem.
           content:
@@ -95,6 +97,8 @@ paths:
               properties:
                 handle: { $ref: "#/components/schemas/Handle" }
                 password: { type: string, minLength: 8, maxLength: 128 }
+                device_label: { $ref: "#/components/schemas/DeviceLabel" }
+                captcha_token: { type: string, description: Exigido após 5 falhas por handle ou IP. }
       responses:
         "200":
           content:
@@ -102,7 +106,12 @@ paths:
               schema: { $ref: "#/components/schemas/TokenPair" }
           description: Tokens emitidos.
         "401":
-          description: Mensagem genérica, sem dizer se o handle existe.
+          description: Mesmo corpo para handle inexistente e senha errada.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "403":
+          description: CAPTCHA exigido (ou inválido) após falhas repetidas.
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
@@ -131,6 +140,61 @@ paths:
               schema: { $ref: "#/components/schemas/TokenPair" }
           description: Novo par de tokens.
         "401": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Encerrar a sessão deste dispositivo
+      description: Revoga a família do refresh token enviado. Idempotente; sempre 204.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "204": { description: Sessão encerrada. }
+
+  /me/devices:
+    get:
+      tags: [auth]
+      operationId: listDevices
+      summary: Dispositivos conectados
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Dispositivos da própria conta.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Device" }
+        "401": { $ref: "#/components/responses/Problem" }
+
+  /me/devices/{deviceId}:
+    delete:
+      tags: [auth]
+      operationId: revokeDevice
+      summary: Desconectar um dispositivo
+      description: Dispositivo de outra conta responde 404, igual a inexistente (sem IDOR).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: deviceId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Dispositivo revogado e refresh da família invalidado. }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
 
   /telemetry/tokens:
     post:
@@ -338,12 +402,24 @@ components:
 
     CreateAccountRequest:
       type: object
-      required: [handle, password, phone, email]
+      required: [handle, password]
       properties:
         handle: { $ref: "#/components/schemas/Handle" }
         password: { type: string, minLength: 8, maxLength: 128 }
         phone: { type: string, pattern: "^\\+[1-9][0-9]{7,14}$", description: E.164. }
         email: { type: string, format: email, maxLength: 254 }
+    DeviceLabel:
+      type: string
+      maxLength: 64
+      description: Nome amigável do aparelho, sanitizado pelo servidor.
+    Device:
+      type: object
+      required: [id, label, created_at, last_used_at]
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: string }
+        created_at: { type: string, format: date-time }
+        last_used_at: { type: string, format: date-time }
     Account:
       type: object
       required: [handle, contacts_verified]

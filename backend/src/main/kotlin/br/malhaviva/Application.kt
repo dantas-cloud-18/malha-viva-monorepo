@@ -1,5 +1,8 @@
 package br.malhaviva
 
+import br.malhaviva.auth.AuthComponents
+import br.malhaviva.auth.AuthConfig
+import br.malhaviva.auth.authRoutes
 import br.malhaviva.platform.Database
 import br.malhaviva.platform.DatabaseConfig
 import br.malhaviva.platform.health.healthRoutes
@@ -37,16 +40,21 @@ private val log = LoggerFactory.getLogger("br.malhaviva.Application")
 fun main() {
     val port = System.getenv("PORT")?.toInt() ?: DEFAULT_PORT
     embeddedServer(Netty, port = port) {
-        module(Database.connect(DatabaseConfig.fromEnv()))
+        val dataSource = Database.connect(DatabaseConfig.fromEnv())
+        // falha aqui (pepper/segredo ausentes) derruba a subida antes de aceitar trafego
+        module(dataSource, auth = AuthConfig.fromEnv(dataSource))
     }.start(wait = true)
 }
 
+// parametros com padrao existem so para injecao em testes; agrupar quebraria a assinatura usada por eles
+@Suppress("LongParameterList")
 fun Application.module(
     dataSource: DataSource,
     liveHub: LiveHub = LiveHub(),
     tokens: InMemoryTelemetryTokenStore = InMemoryTelemetryTokenStore(),
     geometry: CorridorGeometry = JdbcCorridorGeometry(dataSource),
     integrity: IntegrityVerifier = integrityVerifierFromEnv(),
+    auth: AuthComponents? = null,
 ) {
     Database.migrate(dataSource)
 
@@ -69,6 +77,7 @@ fun Application.module(
             liveRoutes(liveHub)
             ingestRoutes(BatchIngestor(tokens, geometry, liveHub))
             tokenRoutes(TokenIssuer(tokens), integrity)
+            auth?.let { authRoutes(it) }
         }
     }
 }
