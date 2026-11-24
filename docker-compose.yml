@@ -1,0 +1,23 @@
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    environment:
+      POSTGRES_DB: malhaviva
+      POSTGRES_USER: malhaviva
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD no .env}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U malhaviva -d malhaviva"]
+      interval: 5s
+      retries: 10
+
+  cache:
+    image: valkey/valkey:8
+    ports:
+      - "127.0.0.1:6379:6379"
+
+volumes:
+  dbdata:
