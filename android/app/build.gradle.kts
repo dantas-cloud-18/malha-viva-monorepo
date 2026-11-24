@@ -1,3 +1,6 @@
+import java.net.URI
+import java.util.Base64
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -12,6 +15,82 @@ val buildsRelease = gradle.startParameter.taskNames.any { it.contains("release",
 check(!buildsRelease || releaseApiBaseUrl.startsWith("https://")) {
     "malhaviva.apiBaseUrl precisa ser https:// no release (recebido: $releaseApiBaseUrl)"
 }
+
+// TLS pinning (somente release). DESLIGADO por padrao: o dominio e os certificados reais ainda nao existem.
+// Para ligar: -Pmalhaviva.pinSha256=<spki-b64-atual>,<spki-b64-backup> -Pmalhaviva.pinExpiration=AAAA-MM-DD
+// (opcional: -Pmalhaviva.pinDomain=host). Exige pin de backup; veja android/SECURITY-NOTES.md.
+val pinSha256: List<String> =
+    providers
+        .gradleProperty("malhaviva.pinSha256")
+        .orNull
+        ?.split(",")
+        ?.map { it.trim() }
+        ?.filter { it.isNotEmpty() }
+        .orEmpty()
+val pinExpiration: String = providers.gradleProperty("malhaviva.pinExpiration").getOrElse("")
+val pinDomain: String =
+    providers.gradleProperty("malhaviva.pinDomain").getOrElse(URI(releaseApiBaseUrl).host.orEmpty())
+
+abstract class GenerateNetworkSecurityConfig : DefaultTask() {
+    @get:Input
+    abstract val pins: ListProperty<String>
+
+    @get:Input
+    abstract val expiration: Property<String>
+
+    @get:Input
+    abstract val domain: Property<String>
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val pinList = pins.get()
+        val xml =
+            if (pinList.isEmpty()) {
+                // Sem pinning configurado: apenas confia na CA do sistema e proibe cleartext.
+                buildString {
+                    appendLine("<network-security-config>")
+                    appendLine("    <base-config cleartextTrafficPermitted=\"false\" />")
+                    appendLine("</network-security-config>")
+                }
+            } else {
+                check(pinList.size >= 2) { "pinning ligado exige pelo menos 2 pins (atual + BACKUP)" }
+                pinList.forEach {
+                    check(runCatching { Base64.getDecoder().decode(it).size == 32 }.getOrDefault(false)) {
+                        "pin invalido (esperado SHA-256 de SPKI em base64, 32 bytes): $it"
+                    }
+                }
+                check(Regex("""\d{4}-\d{2}-\d{2}""").matches(expiration.get())) {
+                    "pinning ligado exige -Pmalhaviva.pinExpiration=AAAA-MM-DD"
+                }
+                check(domain.get().isNotEmpty()) { "dominio do pinning vazio (use -Pmalhaviva.pinDomain)" }
+                buildString {
+                    appendLine("<network-security-config>")
+                    appendLine("    <base-config cleartextTrafficPermitted=\"false\" />")
+                    appendLine("    <domain-config cleartextTrafficPermitted=\"false\">")
+                    appendLine("        <domain includeSubdomains=\"false\">${domain.get()}</domain>")
+                    appendLine("        <pin-set expiration=\"${expiration.get()}\">")
+                    pinList.forEach { appendLine("            <pin digest=\"SHA-256\">$it</pin>") }
+                    appendLine("        </pin-set>")
+                    appendLine("    </domain-config>")
+                    appendLine("</network-security-config>")
+                }
+            }
+        val file = outputDir.get().asFile.resolve("xml/network_security_config.xml")
+        file.parentFile.mkdirs()
+        file.writeText(xml)
+    }
+}
+
+val generateNetSecConfig =
+    tasks.register<GenerateNetworkSecurityConfig>("generateReleaseNetworkSecurityConfig") {
+        pins.set(pinSha256)
+        expiration.set(pinExpiration)
+        domain.set(pinDomain)
+        outputDir.set(layout.buildDirectory.dir("generated/netsec/release"))
+    }
 
 android {
     namespace = "br.malhaviva.app"
@@ -33,15 +112,25 @@ android {
         }
         release {
             buildConfigField("String", "API_BASE_URL", "\"$releaseApiBaseUrl\"")
+            isDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        variant.sources.res?.addGeneratedSourceDirectory(
+            generateNetSecConfig,
+            GenerateNetworkSecurityConfig::outputDir,
+        )
     }
 }
 
