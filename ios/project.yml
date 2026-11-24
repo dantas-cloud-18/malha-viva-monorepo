@@ -1,0 +1,63 @@
+name: MalhaViva
+options:
+  bundleIdPrefix: br.malhaviva
+  deploymentTarget:
+    iOS: "17.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+packages:
+  MalhaVivaKit:
+    path: Packages/MalhaVivaKit
+targets:
+  MalhaViva:
+    type: application
+    platform: iOS
+    sources: [App]
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Malha Viva
+        NSSupportsLiveActivities: true
+        UILaunchScreen: {}
+    dependencies:
+      - target: MalhaVivaWidgets
+      - package: MalhaVivaKit
+        product: DesignSystem
+      - package: MalhaVivaKit
+        product: CoreUI
+      - package: MalhaVivaKit
+        product: DomainLayer
+      - package: MalhaVivaKit
+        product: DataLayer
+      - package: MalhaVivaKit
+        product: FeatureAuth
+      - package: MalhaVivaKit
+        product: FeatureTrains
+      - package: MalhaVivaKit
+        product: FeatureStations
+      - package: MalhaVivaKit
+        product: FeatureTracking
+      - package: MalhaVivaKit
+        product: FeatureAlerts
+      - package: MalhaVivaKit
+        product: FeaturePrivacy
+      - package: MalhaVivaKit
+        product: FeatureOnboarding
+      - package: MalhaVivaKit
+        product: FeatureAchievements
+      - package: MalhaVivaKit
+        product: FeatureWidgets
+  MalhaVivaWidgets:
+    type: app-extension
+    platform: iOS
+    sources: [Widgets]
+    info:
+      path: Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: Malha Viva
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    dependencies:
+      - package: MalhaVivaKit
+        product: FeatureTracking

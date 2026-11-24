@@ -1,0 +1,6 @@
+included:
+  - App
+  - Widgets
+  - Packages
+excluded:
+  - Packages/MalhaVivaKit/.build
