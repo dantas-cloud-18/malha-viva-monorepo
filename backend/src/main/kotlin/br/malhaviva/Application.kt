@@ -6,10 +6,13 @@ import br.malhaviva.platform.health.healthRoutes
 import br.malhaviva.tracking.ingest.BatchIngestor
 import br.malhaviva.tracking.ingest.CorridorGeometry
 import br.malhaviva.tracking.ingest.InMemoryTelemetryTokenStore
+import br.malhaviva.tracking.ingest.IntegrityVerifier
 import br.malhaviva.tracking.ingest.JdbcCorridorGeometry
 import br.malhaviva.tracking.ingest.PartitionMaintenance
-import br.malhaviva.tracking.ingest.TelemetryTokenStore
+import br.malhaviva.tracking.ingest.TokenIssuer
 import br.malhaviva.tracking.ingest.ingestRoutes
+import br.malhaviva.tracking.ingest.integrityVerifierFromEnv
+import br.malhaviva.tracking.ingest.tokenRoutes
 import br.malhaviva.tracking.live.LiveHub
 import br.malhaviva.tracking.live.liveRoutes
 import io.ktor.http.HttpStatusCode
@@ -41,8 +44,9 @@ fun main() {
 fun Application.module(
     dataSource: DataSource,
     liveHub: LiveHub = LiveHub(),
-    tokens: TelemetryTokenStore = InMemoryTelemetryTokenStore(),
+    tokens: InMemoryTelemetryTokenStore = InMemoryTelemetryTokenStore(),
     geometry: CorridorGeometry = JdbcCorridorGeometry(dataSource),
+    integrity: IntegrityVerifier = integrityVerifierFromEnv(),
 ) {
     Database.migrate(dataSource)
 
@@ -64,6 +68,7 @@ fun Application.module(
             healthRoutes(dataSource)
             liveRoutes(liveHub)
             ingestRoutes(BatchIngestor(tokens, geometry, liveHub))
+            tokenRoutes(TokenIssuer(tokens), integrity)
         }
     }
 }

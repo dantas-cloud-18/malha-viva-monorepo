@@ -141,16 +141,31 @@ paths:
       description: >
         Emite token anônimo curto para uma viagem, só para cliente atestado
         (Play Integrity ou App Attest). Não aceita nem grava token de conta.
-      parameters:
-        - $ref: "#/components/parameters/Attestation"
-        - $ref: "#/components/parameters/Platform"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [platform, integrity_token]
+              additionalProperties: false
+              properties:
+                platform: { type: string, enum: [android, ios] }
+                integrity_token:
+                  type: string
+                  description: Token do Play Integrity ou asserção do App Attest. Nunca é gravado nem devolvido.
       responses:
         "201":
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TelemetryToken" }
-          description: Token anônimo emitido.
-        "403":
+          description: Token anônimo emitido (válido por 6 horas).
+        "400":
+          description: Corpo malformado, acima de 4 KiB ou com plataforma desconhecida.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401":
           description: Cliente não atestado.
           content:
             application/problem+json:
@@ -293,16 +308,6 @@ components:
       name: corridor
       required: true
       schema: { $ref: "#/components/schemas/Corridor" }
-    Attestation:
-      in: header
-      name: X-Attestation
-      required: true
-      schema: { type: string, description: Token do Play Integrity ou asserção do App Attest. }
-    Platform:
-      in: header
-      name: X-Platform
-      required: true
-      schema: { type: string, enum: [android, ios] }
 
   responses:
     Problem:
