@@ -58,8 +58,8 @@ Probabilidade (B/M/A) e impacto (B/M/A), antes e depois das mitigações. Valore
 
 | # | Risco | Antes | Mitigação existente ou prevista | Depois |
 |---|---|---|---|---|
-| R1 | Reidentificação por trajetória (casa, trabalho, rotina) | A/A | ID efêmero por viagem, corte de 300 m no início e no fim (`sanitizeTrip`), descarte fora do corredor, TTL 24 h. Limiar mínimo de publicação: **NAO IMPLEMENTADO** | M/M até o limiar existir; B/M depois |
-| R2 | Trem de 1 sinal expõe o deslocamento de uma pessoa em tempo real | A/A | Hoje o `TrainState` já publica trens de 1 sinal (confiança 0,3). **Lacuna.** Exigir k mínimo de sinais para publicar | M/M até corrigir |
+| R1 | Reidentificação por trajetória (casa, trabalho, rotina) | A/A | ID efêmero por viagem, corte de 300 m no início e no fim (`sanitizeTrip`), descarte fora do corredor, TTL 24 h. Limiar mínimo de publicação: **implementado** (k=3, `MALHAVIVA_TRAIN_MIN_CONTRIBUTORS`, piso 2) | B/M |
+| R2 | Trem de 1 sinal expõe o deslocamento de uma pessoa em tempo real | A/A | `TrainState` só é publicado (polling e SSE) com pelo menos k=3 IDs efêmeros distintos na janela de 30 s; a mesma viagem enviando vários pontos conta uma vez (`TrainClusterer`, testado). k configurável, nunca abaixo de 2 | B/M |
 | R3 | Lotação de estação vazia revela presença individual | A/A | k-anonimato na lotação (seção 7). **NAO IMPLEMENTADO** | B/M |
 | R4 | Menor compartilhando localização | M/A | Bloqueio para menores de 18 (`sharingBlocked`), mas depende de perfil de idade **NAO IMPLEMENTADO** | A/A até existir verificação de idade |
 | R5 | Vazamento de contatos (telefone e e-mail em claro em `accounts`) | M/A | Criptografia do RDS em repouso, acesso mínimo, logs sem PII. Avaliar cifra por coluna | M/M |

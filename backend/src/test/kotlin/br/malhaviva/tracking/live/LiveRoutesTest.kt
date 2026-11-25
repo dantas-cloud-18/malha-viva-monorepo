@@ -11,6 +11,10 @@ import io.ktor.server.routing.routing
 import io.ktor.server.sse.SSE
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -50,6 +54,41 @@ class LiveRoutesTest {
             val train = body["trains"]!!.jsonArray.single().jsonObject
             assertEquals(3, train["signals"].toString().toInt())
             assertEquals(1050.0, train["along_m"].toString().toDouble())
+        }
+
+    @Test
+    fun `trem com k-1 ids distintos fica escondido no polling e no hub`() =
+        testApplication {
+            setup()
+            hub.update(key, "eph-a", PassengerPosition(1000.0, 12.0, now))
+            hub.update(key, "eph-b", PassengerPosition(1050.0, 14.0, now))
+            val body = Json.parseToJsonElement(client.get(url).bodyAsText()).jsonObject
+            assertEquals(0, body["trains"]!!.jsonArray.size)
+            hub.update(key, "eph-c", PassengerPosition(1100.0, 13.0, now))
+            val shown = Json.parseToJsonElement(client.get(url).bodyAsText()).jsonObject
+            assertEquals(1, shown["trains"]!!.jsonArray.size)
+        }
+
+    @Test
+    fun `mesma viagem enviando varios pontos conta uma vez so`() {
+        repeat(10) { hub.update(key, "eph-a", PassengerPosition(1000.0 + it, 12.0, now)) }
+        hub.update(key, "eph-b", PassengerPosition(1050.0, 14.0, now))
+        assertEquals(0, hub.snapshot(key).size)
+    }
+
+    @Test
+    fun `stream do hub so emite o trem quando atinge k`() =
+        runBlocking {
+            val emitted = mutableListOf<TrainChange>()
+            val job = launch(start = CoroutineStart.UNDISPATCHED) { hub.changes.collect { emitted += it } }
+            hub.update(key, "eph-a", PassengerPosition(1000.0, 12.0, now))
+            hub.update(key, "eph-b", PassengerPosition(1050.0, 14.0, now))
+            yield()
+            assertEquals(0, emitted.size)
+            hub.update(key, "eph-c", PassengerPosition(1100.0, 13.0, now))
+            yield()
+            assertEquals(1, emitted.size)
+            job.cancel()
         }
 
     @Test

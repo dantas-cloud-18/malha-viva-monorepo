@@ -20,7 +20,9 @@ import br.malhaviva.tracking.ingest.TokenIssuer
 import br.malhaviva.tracking.ingest.ingestRoutes
 import br.malhaviva.tracking.ingest.integrityVerifierFromEnv
 import br.malhaviva.tracking.ingest.tokenRoutes
+import br.malhaviva.tracking.live.ClusterPolicy
 import br.malhaviva.tracking.live.LiveHub
+import br.malhaviva.tracking.live.TrainClusterer
 import br.malhaviva.tracking.live.liveRoutes
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -55,7 +57,8 @@ fun main() {
 @Suppress("LongParameterList")
 fun Application.module(
     dataSource: DataSource,
-    liveHub: LiveHub = LiveHub(),
+    liveHub: LiveHub =
+        LiveHub(clusterer = TrainClusterer(ClusterPolicy.minContributorsFromEnv(System::getenv))),
     tokens: InMemoryTelemetryTokenStore = InMemoryTelemetryTokenStore(),
     geometry: CorridorGeometry = JdbcCorridorGeometry(dataSource),
     integrity: IntegrityVerifier = integrityVerifierFromEnv(),

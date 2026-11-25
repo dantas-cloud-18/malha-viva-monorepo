@@ -717,6 +717,9 @@ paths:
       description: >
         Snapshot dos trens estimados em um sentido. Fallback de polling para o stream SSE.
         Nenhum campo identifica passageiro, dispositivo ou conta; os ids dos trens sao efemeros.
+        k-anonimato: um trem so aparece quando ha pelo menos K viagens anonimas distintas (ids efemeros de viagem,
+        nao pontos) dentro da janela de 30 s. K padrao 3, configuravel no servidor (minimo 2). Abaixo disso a lista
+        vem sem o trem.
       parameters:
         - $ref: "#/components/parameters/Corridor"
         - in: query
@@ -739,7 +742,8 @@ paths:
       summary: Trens do corredor (SSE)
       security: []
       description: >
-        Server-Sent Events. Cada evento `train` traz o JSON de um TrainState atualizado.
+        Server-Sent Events. Cada evento `train` traz o JSON de um TrainState atualizado. Mesmo limiar k-anonimato do
+        polling: so sao enviados trens com pelo menos K viagens anonimas distintas na janela de 30 s (padrao 3).
         Comentario de heartbeat a cada 15 s. Há teto de conexões abertas, global e por IP: acima dele a
         conexão não abre (503 com `Retry-After`).
       parameters:
@@ -1243,7 +1247,7 @@ components:
         id: { type: string, description: "ID efemero do cluster; nao deriva de nenhum id de passageiro." }
         along_m: { type: number, description: "Posicao ao longo da via, em metros." }
         speed_mps: { type: number, minimum: 0 }
-        signals: { type: integer, minimum: 1, description: Quantidade de passageiros agrupados. }
+        signals: { type: integer, minimum: 2, description: "Quantidade de viagens anonimas distintas agrupadas; nunca abaixo do limiar k (padrao 3, minimo 2) do servidor." }
         confidence: { type: number, minimum: 0, maximum: 1 }
         updated_at_ms: { type: integer, format: int64 }
     TrainsSnapshot:

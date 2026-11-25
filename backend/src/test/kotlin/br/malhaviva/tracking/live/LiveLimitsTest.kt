@@ -104,7 +104,9 @@ class LiveLimitsTest {
         assertEquals(1, hub.snapshot(key).size, "dentro de 1 s o agrupamento nao e refeito")
         clock = t0 + 1_100
         assertEquals(0, hub.snapshot(key).size, "passado 1 s recalcula e as posicoes velhas saem")
-        hub.update(key, "novo", PassengerPosition(2000.0, 10.0, clock))
+        listOf(2000.0, 2050.0, 2100.0).forEachIndexed { i, along ->
+            hub.update(key, "novo$i", PassengerPosition(along, 10.0, clock))
+        }
         assertEquals(1, hub.snapshot(key).size, "atualizacao nova aparece na hora")
     }
 }

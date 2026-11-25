@@ -33,6 +33,15 @@ object ClusterPolicy {
     const val CONF_TWO = 0.5
     const val CONF_BASE = 0.6
     const val CONF_RANGE = 0.4
+
+    /** k-anonimato: trem so e publicado com pelo menos k ids efemeros distintos (RIPD R1/R2). */
+    const val DEFAULT_MIN_CONTRIBUTORS = 3
+    const val MIN_CONTRIBUTORS_FLOOR = 2
+    const val MIN_CONTRIBUTORS_ENV = "MALHAVIVA_TRAIN_MIN_CONTRIBUTORS"
+
+    /** Invalido ou abaixo do piso (2) cai no piso; ausente usa o padrao. Nunca publica trem de 1 pessoa. */
+    fun minContributorsFromEnv(env: (String) -> String?): Int =
+        (env(MIN_CONTRIBUTORS_ENV)?.toIntOrNull() ?: DEFAULT_MIN_CONTRIBUTORS).coerceAtLeast(MIN_CONTRIBUTORS_FLOOR)
 }
 
 private fun median(sorted: List<Double>): Double {
@@ -74,11 +83,13 @@ private fun inliersOf(group: List<PassengerPosition>): List<PassengerPosition> {
 }
 
 class TrainClusterer(
+    private val minContributors: Int = ClusterPolicy.DEFAULT_MIN_CONTRIBUTORS,
     private val newId: () -> String = { UUID.randomUUID().toString() },
 ) {
     /**
      * Estima os trens de um corredor+sentido. [previous] serve so para manter ids estaveis:
-     * cada grupo herda o id do trem anterior mais proximo (ate MATCH_RADIUS_M).
+     * cada grupo herda o id do trem anterior mais proximo (ate MATCH_RADIUS_M). Grupos com menos de
+     * [minContributors] posicoes (cada uma de um id efemero distinto) nao sao trens publicaveis e saem aqui.
      */
     fun cluster(
         positions: Collection<PassengerPosition>,
@@ -86,7 +97,7 @@ class TrainClusterer(
         previous: List<TrainState> = emptyList(),
     ): List<TrainState> {
         val fresh = positions.filter { nowMs - it.tsMs <= ClusterPolicy.MAX_AGE_MS }.sortedBy { it.alongM }
-        val drafts = groupByGap(fresh).map { draft(it) }
+        val drafts = groupByGap(fresh).filter { it.size >= minContributors }.map { draft(it) }
         val ids = assignIds(drafts.map { it.alongM }, previous)
         return drafts.mapIndexed { i, d -> d.copy(id = ids[i]) }
     }
