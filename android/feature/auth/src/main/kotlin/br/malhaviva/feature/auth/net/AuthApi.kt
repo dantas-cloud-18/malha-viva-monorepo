@@ -8,7 +8,7 @@ import org.json.JSONObject
  * senhas nem tokens em log.
  */
 class AuthApi(
-    baseUrl: String,
+    baseUrl: () -> String,
     transport: HttpTransport,
 ) {
     private val client = JsonClient(transport, baseUrl)

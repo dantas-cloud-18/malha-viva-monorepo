@@ -49,8 +49,8 @@ class E2eLocalBackendTest {
     fun fullFlow() =
         runBlocking {
             val transport = UrlConnectionTransport()
-            val api = AuthApi(url, transport)
-            val account = AccountApi(url, transport)
+            val api = AuthApi({ url }, transport)
+            val account = AccountApi({ url }, transport)
             val secrets = InMemorySecretStore()
             val session = AuthSession(api, secrets, { "dev-captcha" })
             val handle = "@e2e_" + System.nanoTime().toString(36)
@@ -113,7 +113,7 @@ class E2eLocalBackendTest {
 
     private suspend fun telemetryFlow(transport: HttpTransport) {
         // telemetria assinada: token anonimo com "dev-integrity" e lote HMAC
-        val uploader = HttpBatchUploader(url, transport, { "dev-integrity" })
+        val uploader = HttpBatchUploader({ url }, transport, { "dev-integrity" })
         val t0 = System.currentTimeMillis() - 30_000
         val samples =
             (0 until 5).map {

@@ -22,10 +22,8 @@ private const val STATUS_TOO_MANY = 429
  */
 internal class JsonClient(
     private val transport: HttpTransport,
-    baseUrl: String,
+    private val baseUrl: () -> String,
 ) {
-    private val base = baseUrl.trimEnd('/') + "/v1"
-
     suspend fun <T> call(
         method: String,
         path: String,
@@ -41,7 +39,10 @@ internal class JsonClient(
                 JSONObject().apply(it).toString().toByteArray(Charsets.UTF_8)
             }
         return try {
-            val response = transport.execute(HttpRequest(method, base + path, headers, payload))
+            val response =
+                transport.execute(
+                    HttpRequest(method, baseUrl().trimEnd('/') + "/v1" + path, headers, payload),
+                )
             if (response.status in SUCCESS) ApiResult.Ok(parse(response.body)) else ApiResult.Fail(response.toError())
         } catch (_: IOException) {
             ApiResult.Fail(AuthError.Network)

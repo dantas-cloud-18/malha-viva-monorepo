@@ -59,12 +59,12 @@ object CorridorParser {
  * a busca em segundo plano e devolve null (o servico encerra com NoRoute e o usuario tenta de novo).
  */
 class NetworkRouteProvider(
-    baseUrl: String,
+    private val baseUrl: () -> String,
     private val transport: HttpTransport,
     private val scope: CoroutineScope,
     private val corridor: String = HttpBatchUploader.CORRIDOR,
 ) : RouteProvider {
-    private val base = baseUrl.trimEnd('/')
+    private val base get() = baseUrl().trimEnd('/')
     private val loading = AtomicBoolean(false)
 
     @Volatile private var route: Route? = null

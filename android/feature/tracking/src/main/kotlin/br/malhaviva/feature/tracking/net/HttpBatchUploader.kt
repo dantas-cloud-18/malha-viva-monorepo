@@ -27,14 +27,14 @@ fun interface IntegrityTokenProvider {
  * Nunca registra coordenadas nem tokens em log. Lotes sao enviados em ordem (um por vez).
  */
 class HttpBatchUploader(
-    baseUrl: String,
+    private val baseUrl: () -> String,
     private val transport: HttpTransport,
     private val integrity: IntegrityTokenProvider,
     private val corridor: String = CORRIDOR,
     private val clock: () -> Long = System::currentTimeMillis,
     private val newNonce: () -> String = BatchSigner::newNonce,
 ) : BatchUploader {
-    private val base = baseUrl.trimEnd('/')
+    private val base get() = baseUrl().trimEnd('/')
     private val lock = Mutex()
     private var session: Session? = null
 

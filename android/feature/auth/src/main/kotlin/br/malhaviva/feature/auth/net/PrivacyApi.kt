@@ -6,7 +6,7 @@ import org.json.JSONObject
 
 /** Rotas de privacidade (LGPD) de `/me`: consentimentos, exportacao, correcao e exclusao. Exigem access token. */
 class PrivacyApi(
-    baseUrl: String,
+    baseUrl: () -> String,
     transport: HttpTransport,
 ) {
     private val client = JsonClient(transport, baseUrl)

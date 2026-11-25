@@ -6,6 +6,7 @@ import br.malhaviva.app.LocationConsentStore
 import br.malhaviva.app.SharingBlockStore
 import br.malhaviva.app.captchaTokenProvider
 import br.malhaviva.app.integrityTokenProvider
+import br.malhaviva.core.data.net.ApiBaseUrlStore
 import br.malhaviva.core.data.net.HttpTransport
 import br.malhaviva.core.data.net.UrlConnectionTransport
 import br.malhaviva.core.data.secure.KeystoreSecretStore
@@ -34,7 +35,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import javax.inject.Singleton
 
-/** Grafo de rede e sessao do app. A base da API vem so de [BuildConfig.API_BASE_URL]. */
+/** Grafo de rede e sessao do app. A base da API vem de [ApiBaseUrlStore], lida a cada requisicao. */
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
@@ -53,6 +54,12 @@ object AppModule {
     ): SecretStore = KeystoreSecretStore(context)
 
     @Provides
+    @Singleton
+    fun apiBaseUrl(
+        @ApplicationContext context: Context,
+    ): ApiBaseUrlStore = ApiBaseUrlStore(context, BuildConfig.API_BASE_URL, BuildConfig.DEBUG)
+
+    @Provides
     fun captcha(): CaptchaTokenProvider = captchaTokenProvider()
 
     @Provides
@@ -60,15 +67,24 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun authApi(transport: HttpTransport): AuthApi = AuthApi(BuildConfig.API_BASE_URL, transport)
+    fun authApi(
+        baseUrl: ApiBaseUrlStore,
+        transport: HttpTransport,
+    ): AuthApi = AuthApi(baseUrl::current, transport)
 
     @Provides
     @Singleton
-    fun accountApi(transport: HttpTransport): AccountApi = AccountApi(BuildConfig.API_BASE_URL, transport)
+    fun accountApi(
+        baseUrl: ApiBaseUrlStore,
+        transport: HttpTransport,
+    ): AccountApi = AccountApi(baseUrl::current, transport)
 
     @Provides
     @Singleton
-    fun privacyApi(transport: HttpTransport): PrivacyApi = PrivacyApi(BuildConfig.API_BASE_URL, transport)
+    fun privacyApi(
+        baseUrl: ApiBaseUrlStore,
+        transport: HttpTransport,
+    ): PrivacyApi = PrivacyApi(baseUrl::current, transport)
 
     @Provides
     @Singleton
@@ -114,16 +130,18 @@ object TrackingModule {
     @Provides
     @Singleton
     fun uploader(
+        baseUrl: ApiBaseUrlStore,
         transport: HttpTransport,
         integrity: IntegrityTokenProvider,
-    ): HttpBatchUploader = HttpBatchUploader(BuildConfig.API_BASE_URL, transport, integrity)
+    ): HttpBatchUploader = HttpBatchUploader(baseUrl::current, transport, integrity)
 
     @Provides
     @Singleton
     fun routes(
+        baseUrl: ApiBaseUrlStore,
         transport: HttpTransport,
         scope: CoroutineScope,
-    ): NetworkRouteProvider = NetworkRouteProvider(BuildConfig.API_BASE_URL, transport, scope)
+    ): NetworkRouteProvider = NetworkRouteProvider(baseUrl::current, transport, scope)
 }
 
 /** Trens ao vivo (publico, sem sessao): SSE com reconexao e polling de reserva. */
@@ -132,8 +150,10 @@ object TrackingModule {
 object TrainsModule {
     @Provides
     @Singleton
-    fun liveTrains(transport: HttpTransport): LiveTrainsClient =
-        LiveTrainsClient(BuildConfig.API_BASE_URL, transport, UrlConnectionSseSource())
+    fun liveTrains(
+        baseUrl: ApiBaseUrlStore,
+        transport: HttpTransport,
+    ): LiveTrainsClient = LiveTrainsClient(baseUrl::current, transport, UrlConnectionSseSource())
 }
 
 /** Subfluxos de conta que dependem da API e da sessao. */

@@ -14,9 +14,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import br.malhaviva.core.data.net.ApiBaseUrlStore
 import br.malhaviva.feature.auth.AuthEntry
 import br.malhaviva.feature.auth.AuthFlows
 import br.malhaviva.feature.auth.AuthIntent
@@ -47,6 +49,7 @@ private val SESSION_SCREENS =
     setOf(AuthScreen.Devices, AuthScreen.Contacts, AuthScreen.Privacy, AuthScreen.Totp)
 
 /** Raiz da navegacao: sem sessao, o fluxo de conta; com sessao, as abas Trens, Viagem e Conta. */
+@Suppress("LongParameterList")
 @Composable
 fun AppRoot(
     sessionState: StateFlow<SessionState>,
@@ -54,6 +57,7 @@ fun AppRoot(
     flows: AuthFlows,
     tracking: TrackingViewModel,
     trains: TrainsViewModel,
+    server: ApiBaseUrlStore,
 ) {
     val session by sessionState.collectAsState()
     LaunchedEffect(session) {
@@ -62,7 +66,7 @@ fun AppRoot(
         }
     }
     if (session == SessionState.LoggedIn) {
-        MainShell(auth, flows, tracking, trains)
+        MainShell(auth, flows, tracking, trains, server)
     } else {
         AuthEntry(auth, flows, Modifier.systemBarsPadding())
     }
@@ -74,7 +78,10 @@ private fun MainShell(
     flows: AuthFlows,
     tracking: TrackingViewModel,
     trains: TrainsViewModel,
+    server: ApiBaseUrlStore,
 ) {
+    var showServer by rememberSaveable { mutableStateOf(false) }
+    if (showServer) ServerDialog(server) { showServer = false }
     var selected by rememberSaveable { mutableIntStateOf(Tab.Trains.ordinal) }
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -95,7 +102,11 @@ private fun MainShell(
             when (Tab.entries[selected]) {
                 Tab.Trains -> TrainsScreen(trains, Modifier.statusBarsPadding())
                 Tab.Trip -> TrackingScreen(tracking, Modifier.statusBarsPadding())
-                Tab.Account -> AuthEntry(auth, flows, Modifier.statusBarsPadding())
+                Tab.Account ->
+                    AuthEntry(auth, flows, Modifier.statusBarsPadding(), onTitleLongPress = {
+                        showServer =
+                            true
+                    })
                 Tab.Catalog -> CatalogScreen()
             }
         }

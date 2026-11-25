@@ -54,7 +54,7 @@ class HttpBatchUploaderTest {
     ): HttpBatchUploader {
         var n = 0
         return HttpBatchUploader(
-            baseUrl = "http://host:8080/",
+            baseUrl = { "http://host:8080/" },
             transport = transport,
             integrity = { attestation },
             clock = { now },

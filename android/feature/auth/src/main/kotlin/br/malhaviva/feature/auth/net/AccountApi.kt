@@ -6,7 +6,7 @@ import org.json.JSONObject
 
 /** Rotas de `/me` (exigem access token). Use por meio de `AuthSession.authed`, que renova o token em 401. */
 class AccountApi(
-    baseUrl: String,
+    baseUrl: () -> String,
     transport: HttpTransport,
 ) {
     private val client = JsonClient(transport, baseUrl)

@@ -70,7 +70,7 @@ class LiveTrainsClientTest {
     ): LiveTrainsClient {
         script.clock = { currentTime }
         return LiveTrainsClient(
-            baseUrl = "https://api.test/",
+            baseUrl = { "https://api.test/" },
             transport = transport,
             source = script,
             backoff = Backoff(random = { 1.0 }),

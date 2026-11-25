@@ -1,5 +1,6 @@
 package br.malhaviva.feature.auth
 
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,7 +22,10 @@ import br.malhaviva.core.designsystem.MalhaVivaSpacing
 import br.malhaviva.core.designsystem.MalhaVivaTheme
 
 @Composable
-internal fun Title(text: String) = Text(text, style = MaterialTheme.typography.headlineSmall)
+internal fun Title(
+    text: String,
+    modifier: Modifier = Modifier,
+) = Text(text, modifier, style = MaterialTheme.typography.headlineSmall)
 
 @Composable
 internal fun Field(
@@ -155,8 +159,18 @@ internal fun MfaForm(
 internal fun DevicesList(
     state: AuthState,
     onIntent: (AuthIntent) -> Unit,
+    onTitleLongPress: (() -> Unit)? = null,
 ) {
-    Title(stringResource(R.string.auth_devices_title))
+    // Entrada oculta (piloto): pressionar o titulo da conta abre o dialogo do servidor.
+    val titleModifier =
+        if (onTitleLongPress ==
+            null
+        ) {
+            Modifier
+        } else {
+            Modifier.combinedClickable(onClick = {}, onLongClick = onTitleLongPress)
+        }
+    Title(stringResource(R.string.auth_devices_title), titleModifier)
     if (state.devices.isEmpty() && !state.busy) Hint(stringResource(R.string.auth_devices_empty))
     state.devices.forEach { device ->
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

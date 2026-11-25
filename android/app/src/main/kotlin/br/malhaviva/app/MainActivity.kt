@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import br.malhaviva.core.data.net.ApiBaseUrlStore
 import br.malhaviva.core.designsystem.MalhaVivaTheme
 import br.malhaviva.feature.auth.AccountRecovery
 import br.malhaviva.feature.auth.AuthFlows
@@ -47,6 +48,8 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var liveTrains: LiveTrainsClient
 
+    @Inject lateinit var apiBaseUrl: ApiBaseUrlStore
+
     // Cada ViewModel e criado sob demanda pela fabrica (os modulos de feature nao usam Hilt).
     private val auth by viewModels<AuthViewModel> {
         factory { AuthViewModel(session, account, "${Build.MANUFACTURER} ${Build.MODEL}") }
@@ -67,7 +70,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val flows = AuthFlows(recoveryVm, totpVm, contactsVm, parentalVm, privacyVm)
         setContent {
-            MalhaVivaTheme { AppRoot(session.state, auth, flows, tracking, trains) }
+            MalhaVivaTheme { AppRoot(session.state, auth, flows, tracking, trains, apiBaseUrl) }
         }
     }
 

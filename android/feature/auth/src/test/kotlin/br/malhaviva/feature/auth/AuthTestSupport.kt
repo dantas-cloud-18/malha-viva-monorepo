@@ -80,9 +80,9 @@ class TestEnv(
 ) {
     val transport = FakeTransport()
     val secrets = InMemorySecretStore()
-    val api = AuthApi("http://host:8080/", transport)
-    val privacy = PrivacyApi("http://host:8080/", transport)
-    val account = AccountApi("http://host:8080/", transport)
+    val api = AuthApi({ "http://host:8080/" }, transport)
+    val privacy = PrivacyApi({ "http://host:8080/" }, transport)
+    val account = AccountApi({ "http://host:8080/" }, transport)
     val session = AuthSession(api, secrets, { captcha })
     val recovery = AccountRecovery(api, { captcha }, session)
     val parental = ParentalConsent(api, { captcha })

@@ -35,9 +35,10 @@ fun AuthEntry(
     viewModel: AuthViewModel,
     flows: AuthFlows,
     modifier: Modifier = Modifier,
+    onTitleLongPress: (() -> Unit)? = null,
 ) {
     val state by viewModel.state.collectAsState()
-    AuthContent(state, viewModel::act, flows, modifier)
+    AuthContent(state, viewModel::act, flows, modifier, onTitleLongPress)
 }
 
 /** Login, MFA, cadastro, recuperacao, TOTP, contatos e dispositivos mostram dados sensiveis: tudo sob FLAG_SECURE. */
@@ -47,6 +48,7 @@ fun AuthContent(
     onIntent: (AuthIntent) -> Unit,
     flows: AuthFlows,
     modifier: Modifier = Modifier,
+    onTitleLongPress: (() -> Unit)? = null,
 ) {
     SecureScreen {
         Column(
@@ -58,7 +60,7 @@ fun AuthContent(
                 AuthScreen.Mfa -> MfaForm(state, onIntent)
                 AuthScreen.Signup -> SignupForm(state, onIntent)
                 AuthScreen.EnrollmentOnly -> TotpFlow(flows.totp, enrollOnly = true, onMain = onIntent)
-                AuthScreen.Devices -> DevicesList(state, onIntent)
+                AuthScreen.Devices -> DevicesList(state, onIntent, onTitleLongPress)
                 AuthScreen.Recovery -> RecoveryFlow(flows.recovery, state.handle, onIntent)
                 AuthScreen.Totp -> TotpFlow(flows.totp, enrollOnly = false, onMain = onIntent)
                 AuthScreen.Contacts -> ContactsFlow(flows.contacts, onIntent)

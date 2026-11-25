@@ -66,14 +66,14 @@ interface TrainsSource {
  * depois de [stableAfterMs] aberta, para nao martelar o servidor se ele fechar logo apos abrir.
  */
 class LiveTrainsClient(
-    baseUrl: String,
+    private val baseUrl: () -> String,
     private val transport: HttpTransport,
     private val source: SseSource,
     private val backoff: Backoff = Backoff(),
     private val clock: () -> Long = System::currentTimeMillis,
     private val stableAfterMs: Long = STABLE_AFTER_MS,
 ) : TrainsSource {
-    private val base = baseUrl.trimEnd('/')
+    private val base get() = baseUrl().trimEnd('/')
 
     override fun feed(direction: Direction): Flow<TrainsFeed> =
         channelFlow {
