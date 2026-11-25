@@ -28,6 +28,15 @@ interface AccountRepository {
         accountId: UUID,
         passwordHash: String,
     )
+
+    /**
+     * Consome o codigo de enrolamento do admin (uso unico): verdadeiro so se a conta e admin e o SHA-256 (hex)
+     * confere com o gravado, que e zerado na mesma operacao.
+     */
+    fun consumeAdminEnrollCode(
+        accountId: UUID,
+        codeHash: String,
+    ): Boolean
 }
 
 /** Um dispositivo e uma familia de refresh: [id] tambem e o family_id dos tokens. */
@@ -81,6 +90,9 @@ interface SessionRepository {
         accountId: UUID,
         now: Instant,
     )
+
+    /** A familia (dispositivo) existe e nao foi revogada. */
+    fun isFamilyActive(familyId: UUID): Boolean
 
     /** Somente dispositivos nao revogados. */
     fun listDevices(accountId: UUID): List<DeviceRecord>

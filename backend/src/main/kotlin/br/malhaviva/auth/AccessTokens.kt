@@ -14,6 +14,8 @@ const val AMR_OTP = "otp"
 
 /** Token restrito do admin sem TOTP: so abre as rotas de enrolamento. */
 const val SCOPE_MFA_ENROLL = "mfa_enroll_only"
+const val TOKEN_ISSUER = "malhaviva"
+const val TOKEN_AUDIENCE = "malhaviva-api"
 private const val MIN_SECRET_BYTES = 32
 private const val JWT_SECRET_ENV = "MALHAVIVA_JWT_SECRET"
 private const val JWT_HEADER = """{"alg":"HS256","typ":"JWT"}"""
@@ -29,21 +31,30 @@ private val json =
 
 fun amrFor(mfa: Boolean): List<String> = if (mfa) listOf(AMR_PASSWORD, AMR_OTP) else listOf(AMR_PASSWORD)
 
-/** Apenas o necessario: sub = id da conta, metodos de autenticacao e escopo restrito. Nada de PII. */
+/**
+ * Apenas o necessario: emissor, publico, sub = id da conta, metodos de autenticacao, escopo restrito e `sid`
+ * = id da familia de refresh (permite recusar o access de sessao revogada em rotas sensiveis). Nada de PII.
+ * Suppress: DTO do formato do JWT; agrupar mudaria os campos do token.
+ */
 @Serializable
+@Suppress("LongParameterList")
 private class AccessClaims(
+    val iss: String = "",
+    val aud: String = "",
     val sub: String,
     val iat: Long,
     val exp: Long,
     val amr: List<String> = listOf(AMR_PASSWORD),
     val scope: String? = null,
+    val sid: String? = null,
 )
 
-/** Quem o access token autentica. [scope] nao nulo = token restrito. */
+/** Quem o access token autentica. [scope] nao nulo = token restrito; [sessionId] e a familia de refresh. */
 class AccessPrincipal(
     val accountId: UUID,
     val amr: List<String>,
     val scope: String?,
+    val sessionId: UUID? = null,
 ) {
     val mfa: Boolean get() = AMR_OTP in amr
 }
@@ -68,9 +79,20 @@ class AccessTokenService(
         nowMs: Long,
         amr: List<String> = amrFor(false),
         scope: String? = null,
+        sessionId: UUID? = null,
     ): String {
         val iat = nowMs / MS_PER_SECOND
-        val claims = AccessClaims(accountId.toString(), iat, iat + ttlSeconds, amr, scope)
+        val claims =
+            AccessClaims(
+                TOKEN_ISSUER,
+                TOKEN_AUDIENCE,
+                accountId.toString(),
+                iat,
+                iat + ttlSeconds,
+                amr,
+                scope,
+                sessionId?.toString(),
+            )
         val signingInput =
             enc.encodeToString(JWT_HEADER.toByteArray()) + "." +
                 enc.encodeToString(json.encodeToString(AccessClaims.serializer(), claims).toByteArray())
@@ -95,8 +117,9 @@ class AccessTokenService(
                 MessageDigest.isEqual(sign("${parts[0]}.${parts[1]}"), dec.decode(parts[2])) &&
                     String(dec.decode(parts[0])) == JWT_HEADER
             val claims = json.decodeFromString(AccessClaims.serializer(), String(dec.decode(parts[1])))
-            AccessPrincipal(UUID.fromString(claims.sub), claims.amr, claims.scope)
-                .takeIf { valid && nowMs / MS_PER_SECOND < claims.exp }
+            val claimsOk = claims.iss == TOKEN_ISSUER && claims.aud == TOKEN_AUDIENCE
+            AccessPrincipal(UUID.fromString(claims.sub), claims.amr, claims.scope, claims.sid?.let(UUID::fromString))
+                .takeIf { valid && claimsOk && nowMs / MS_PER_SECOND < claims.exp }
         }.getOrNull()
 
     private fun sign(input: String): ByteArray =

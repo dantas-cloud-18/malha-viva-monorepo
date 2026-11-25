@@ -1,13 +1,17 @@
 package br.malhaviva.auth
 
+import br.malhaviva.platform.DEFAULT_MAX_KEYS
+import br.malhaviva.platform.ExpiringMap
+import com.github.benmanes.caffeine.cache.Ticker
 import org.slf4j.LoggerFactory
+import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.min
 
 /**
  * Gancho de CAPTCHA, exigido apos [CAPTCHA_AFTER_FAILURES] falhas por handle ou IP.
  *
- * Producao deve trocar por um provedor real (hCaptcha, Turnstile, reCAPTCHA).
+ * Producao exige um provedor real (hCaptcha, Turnstile, reCAPTCHA): [AuthConfig] nao sobe sem um.
  */
 interface CaptchaVerifier {
     suspend fun verify(
@@ -18,7 +22,7 @@ interface CaptchaVerifier {
 
 /**
  * ATENCAO: NAO E PARA PRODUCAO. Aceita qualquer token nao vazio, entao so prova que o cliente sabe
- * enviar o campo. Existe para o fluxo funcionar ate o provedor real ser escolhido (BRIEF 4.1).
+ * enviar o campo. So entra com `MALHAVIVA_DEV_CAPTCHA=true` (desenvolvimento e testes).
  */
 object NoopCaptchaVerifier : CaptchaVerifier {
     override suspend fun verify(
@@ -52,9 +56,11 @@ sealed interface GuardDecision {
  *
  * Atraso vale por par IP+handle e por IP (um atacante nao tranca a conta alheia; CAPTCHA por handle
  * deixa o dono legitimo entrar). Logs nunca trazem IP nem handle, so contagens.
- * shortcut: mapas nunca sao limpos e nao sao compartilhados entre instancias; trocar por Redis com TTL.
+ * Os mapas expiram por inatividade e tem teto de tamanho ([ExpiringMap]).
+ * shortcut: nao sao compartilhados entre instancias; trocar por Redis com TTL.
  */
 class LoginGuard(
+    ticker: Ticker = Ticker.systemTicker(),
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private class Failures(
@@ -68,8 +74,15 @@ class LoginGuard(
         var blocked: Boolean = false,
     )
 
-    private val failures = ConcurrentHashMap<String, Failures>()
-    private val windows = ConcurrentHashMap<String, Window>()
+    private val failureStore =
+        ExpiringMap<String, Failures>(DEFAULT_MAX_KEYS, Duration.ofMillis(FAILURE_MEMORY_MS), ticker)
+    private val windowStore =
+        ExpiringMap<String, Window>(DEFAULT_MAX_KEYS, Duration.ofMillis(STUFFING_WINDOW_MS), ticker)
+    private val failures get() = failureStore.map
+    private val windows get() = windowStore.map
+
+    /** Entradas vivas nos dois mapas (para testes e metricas). */
+    fun trackedKeys(): Long = failureStore.size() + windowStore.size()
 
     fun check(
         ip: String,
@@ -138,7 +151,7 @@ class LoginGuard(
     ): Long {
         windows.compute(ip) { _, old ->
             (old?.takeIf { now - it.startMs < STUFFING_WINDOW_MS } ?: Window(now, ConcurrentHashMap.newKeySet()))
-                .also { it.handles.add(handle) }
+                .also { if (!it.blocked) it.handles.add(handle) }
         }
         val w = windows.getValue(ip)
         if (!w.blocked && w.handles.size > STUFFING_DISTINCT_HANDLES) {

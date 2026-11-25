@@ -26,6 +26,7 @@ import io.ktor.server.application.install
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.forwardedheaders.XForwardedHeaders
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.response.respond
 import io.ktor.server.routing.route
@@ -62,6 +63,7 @@ fun Application.module(
     maintenance.start()
     monitor.subscribe(ApplicationStopped) { maintenance.stop() }
 
+    installForwardedHeaders()
     install(ContentNegotiation) { json() }
     install(SSE)
     install(StatusPages) {
@@ -80,6 +82,15 @@ fun Application.module(
             auth?.let { authRoutes(it) }
         }
     }
+}
+
+/**
+ * Atras do ALB: o ALB ACRESCENTA o IP de quem conectou ao fim de X-Forwarded-For, entao o ULTIMO item e o cliente
+ * real e o que veio antes pode ser forjado pelo cliente. So e seguro porque o grupo de seguranca da aplicacao aceita
+ * trafego apenas do ALB (infra/terraform/network.tf). Com CloudFront ou outro proxy na frente, rever `skipLastProxies`.
+ */
+internal fun Application.installForwardedHeaders() {
+    install(XForwardedHeaders) { useLastProxy() }
 }
 
 @Serializable

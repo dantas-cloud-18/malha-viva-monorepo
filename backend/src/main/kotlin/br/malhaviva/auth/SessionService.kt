@@ -45,7 +45,10 @@ internal fun sha256Hex(value: String): String =
  * Sessoes: access JWT curto + refresh opaco de 256 bits, guardado so como SHA-256, rotativo a cada uso.
  * Reuso de um refresh ja trocado revoga a familia inteira. O vencimento de 30 dias e absoluto: o filho
  * herda o `expires_at` do pai.
+ *
+ * Suppress: um unico servico de sessao; dividir partiria o acesso ao repositorio e ao relogio.
  */
+@Suppress("TooManyFunctions")
 class SessionService(
     private val sessions: SessionRepository,
     private val access: AccessTokenService,
@@ -70,7 +73,7 @@ class SessionService(
             DeviceRecord(deviceId, accountId, sanitizeDeviceLabel(deviceLabel), now, now),
             RefreshRecord(sha256Hex(raw), accountId, deviceId, now, now.plus(REFRESH_TTL), mfa = mfa),
         )
-        return TokenPair(access.issue(accountId, clock(), amrFor(mfa)), raw)
+        return TokenPair(access.issue(accountId, clock(), amrFor(mfa), sessionId = deviceId), raw)
     }
 
     /** Devolve novo par ou null (401) se o token e desconhecido, vencido, revogado ou reusado. */
@@ -94,7 +97,7 @@ class SessionService(
         val next =
             current.copy(tokenHash = sha256Hex(raw), issuedAt = now, replacedAt = null, revokedAt = null)
         return if (sessions.rotate(hash, next, now)) {
-            TokenPair(access.issue(current.accountId, clock(), amrFor(current.mfa)), raw)
+            TokenPair(access.issue(current.accountId, clock(), amrFor(current.mfa), sessionId = current.familyId), raw)
         } else {
             reuseDetected(current)
         }
@@ -111,7 +114,10 @@ class SessionService(
         sessions.findToken(sha256Hex(rawToken))?.let { sessions.revokeFamily(it.familyId, now()) }
     }
 
-    /** Revoga todas as sessoes da conta. O access token em voo segue valido ate vencer (15 min). */
+    /** Familia de refresh viva (dispositivo nao revogado): consulta ao banco das rotas sensiveis. */
+    fun isActive(sessionId: UUID): Boolean = sessions.isFamilyActive(sessionId)
+
+    /** Revoga todas as sessoes. Rotas sensiveis recusam o access em voo ([isActive]); as demais, so ao vencer. */
     fun revokeAll(accountId: UUID) = sessions.revokeAll(accountId, now())
 
     fun listDevices(accountId: UUID): List<DeviceRecord> = sessions.listDevices(accountId)

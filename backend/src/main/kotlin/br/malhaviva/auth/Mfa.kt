@@ -2,14 +2,17 @@ package br.malhaviva.auth
 
 import br.malhaviva.auth.recovery.TotpEnrollment
 import br.malhaviva.auth.recovery.TotpService
+import br.malhaviva.platform.ExpiringMap
+import com.github.benmanes.caffeine.cache.Ticker
 import java.security.SecureRandom
+import java.time.Duration
 import java.util.Base64
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
 const val MFA_TOKEN_TTL_SECONDS = 5L * 60
 private const val MFA_TOKEN_BYTES = 32
 private const val MFA_MAX_ATTEMPTS = 5
+private const val MFA_MAX_CHALLENGES = 100_000L
 private const val MS_PER_SECOND = 1000L
 
 /** O que a senha correta destrava. */
@@ -46,13 +49,29 @@ sealed interface MfaRedeem {
 
 enum class TotpDisableResult { DONE, DENIED, ADMIN_MANDATORY }
 
+sealed interface TotpEnrollResult {
+    class Started(
+        val enrollment: TotpEnrollment,
+    ) : TotpEnrollResult
+
+    data object AlreadyEnabled : TotpEnrollResult
+
+    /** Admin: o primeiro enrolamento exige o codigo de uso unico entregue fora de banda. */
+    data object CodeRequired : TotpEnrollResult
+}
+
 /**
  * 2FA TOTP no login: opcional para `user`, obrigatorio para `admin` (BRIEF 4.2).
  *
  * O `mfa_token` e opaco (256 bits), vale 5 min, e de uso unico e so o SHA-256 fica guardado. Codigos e segredos
  * nunca sao logados. A recuperacao de senha nao toca no TOTP, entao depois do reset o login segue pedindo o codigo.
- * shortcut: desafios em memoria de um unico no; trocar por Redis com TTL ao escalar horizontalmente.
+ * A forca bruta do codigo e contida por conta ([TotpService]): novo `mfa_token` ou novo IP nao zera a contagem.
+ * shortcut: desafios em memoria de um unico no (com expiracao e teto); trocar por Redis com TTL ao escalar.
+ *
+ * Suppress: injecao de dependencias (o ticker so existe para testar a expiracao) e um unico fluxo de 2FA que
+ * compartilha o estado dos desafios.
  */
+@Suppress("LongParameterList", "TooManyFunctions")
 class MfaService(
     private val accounts: AccountRepository,
     private val totp: TotpService,
@@ -60,8 +79,11 @@ class MfaService(
     private val access: AccessTokenService,
     private val clock: () -> Long = System::currentTimeMillis,
     private val random: SecureRandom = SecureRandom(),
+    ticker: Ticker = Ticker.systemTicker(),
 ) {
-    private val challenges = ConcurrentHashMap<String, MfaChallenge>()
+    private val store =
+        ExpiringMap<String, MfaChallenge>(MFA_MAX_CHALLENGES, Duration.ofSeconds(MFA_TOKEN_TTL_SECONDS), ticker)
+    private val challenges get() = store.map
 
     fun gate(account: AccountRecord): MfaGate =
         when {
@@ -70,10 +92,16 @@ class MfaService(
             else -> MfaGate.NONE
         }
 
-    /** Access restrito ao enrolamento de TOTP, sem refresh e sem dispositivo. */
+    /** Access restrito ao enrolamento de TOTP, sem refresh, sem dispositivo e sem `sid`. */
     fun enrollOnlyToken(accountId: UUID): String = access.issue(accountId, clock(), amrFor(false), SCOPE_MFA_ENROLL)
 
     fun isAdmin(accountId: UUID): Boolean = accounts.findById(accountId)?.role == ROLE_ADMIN
+
+    /** Segundos de trava do TOTP da conta (0 = livre). */
+    fun totpLockedSeconds(accountId: UUID): Long = totp.lockedSeconds(accountId)
+
+    /** Desafios vivos (para testes). */
+    fun pendingChallenges(): Long = store.size()
 
     fun open(
         accountId: UUID,
@@ -82,10 +110,8 @@ class MfaService(
     ): String {
         val raw =
             Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(MFA_TOKEN_BYTES).also(random::nextBytes))
-        val now = clock()
-        challenges.values.removeIf { it.expiresAtMs <= now }
         challenges[sha256Hex(raw)] =
-            MfaChallenge(accountId, handleKey, deviceLabel, now + MFA_TOKEN_TTL_SECONDS * MS_PER_SECOND)
+            MfaChallenge(accountId, handleKey, deviceLabel, clock() + MFA_TOKEN_TTL_SECONDS * MS_PER_SECOND)
         return raw
     }
 
@@ -116,7 +142,29 @@ class MfaService(
         }
     }
 
-    fun enroll(accountId: UUID): TotpEnrollment? = accounts.findById(accountId)?.let { totp.enroll(it.id, it.handle) }
+    /**
+     * Inicia o enrolamento. Admin sem TOTP so enrola com o [enrollmentCode] de uso unico gravado (como hash) na
+     * mesma operacao manual que o promoveu: so a senha nunca basta para ele registrar o proprio segundo fator.
+     */
+    fun enroll(
+        accountId: UUID,
+        enrollmentCode: String?,
+    ): TotpEnrollResult {
+        val account = accounts.findById(accountId)
+        return when {
+            account == null || totp.isEnabled(accountId) -> TotpEnrollResult.AlreadyEnabled
+            account.role == ROLE_ADMIN && !consumeEnrollmentCode(accountId, enrollmentCode) ->
+                TotpEnrollResult.CodeRequired
+            else ->
+                totp.enroll(account.id, account.handle)?.let { TotpEnrollResult.Started(it) }
+                    ?: TotpEnrollResult.AlreadyEnabled
+        }
+    }
+
+    private fun consumeEnrollmentCode(
+        accountId: UUID,
+        code: String?,
+    ): Boolean = code != null && accounts.consumeAdminEnrollCode(accountId, sha256Hex(code))
 
     fun confirm(
         accountId: UUID,

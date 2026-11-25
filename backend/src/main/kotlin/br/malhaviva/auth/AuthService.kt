@@ -5,6 +5,9 @@ import org.slf4j.LoggerFactory
 private val HANDLE_REGEX = Regex("^@[a-zA-Z0-9_]{3,20}$")
 private val log = LoggerFactory.getLogger("br.malhaviva.auth.AuthService")
 
+/** Formato do @handle; checado antes de criar qualquer estado por chave (limitadores, guarda). */
+fun isValidHandle(handle: String): Boolean = HANDLE_REGEX.matches(handle)
+
 sealed interface RegisterResult {
     data object Created : RegisterResult
 
@@ -66,7 +69,7 @@ class AuthService(
         handle: String,
         password: String,
     ): RegisterResult =
-        if (!HANDLE_REGEX.matches(handle)) {
+        if (!isValidHandle(handle)) {
             RegisterResult.InvalidHandle
         } else {
             when (val checked = policy.check(password, listOf(handle.removePrefix("@")))) {
@@ -143,16 +146,30 @@ class AuthService(
             }
         }
 
-    /** Segundo passo: cada codigo errado conta no [LoginGuard] como uma senha errada. */
+    /** CAPTCHA do cadastro com contato (envia SMS/e-mail). */
+    suspend fun captchaOk(
+        token: String?,
+        ip: String,
+    ): Boolean = captcha.verify(token, ip)
+
+    /**
+     * Segundo passo: cada codigo errado conta no [LoginGuard] como uma senha errada. A forca bruta do codigo e
+     * contida pela trava de TOTP por CONTA (10 erros, 15 min), que vale para qualquer IP e qualquer `mfa_token`.
+     * O CAPTCHA nao se aplica aqui: este passo nao tem campo de token e exigi-lo trancaria o dono legitimo.
+     */
     fun loginMfa(
         ip: String,
         mfaToken: String,
         code: String,
     ): LoginResult {
-        val key = mfa.peek(mfaToken)?.handleKey ?: return LoginResult.InvalidMfa
+        val challenge = mfa.peek(mfaToken) ?: return LoginResult.InvalidMfa
+        val key = challenge.handleKey
         val decision = guard.check(ip, key)
+        val locked = mfa.totpLockedSeconds(challenge.accountId)
         return if (decision is GuardDecision.Blocked) {
             LoginResult.Throttled(decision.retryAfterSeconds)
+        } else if (locked > 0) {
+            LoginResult.Throttled(locked)
         } else {
             when (val r = mfa.redeem(mfaToken, code)) {
                 is MfaRedeem.Ok -> {

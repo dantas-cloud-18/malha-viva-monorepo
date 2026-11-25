@@ -25,7 +25,7 @@ class SessionServiceTest {
     fun `access token carries only sub iat and exp`() {
         val pair = t.sessions.startSession(account, "Pixel")
         val claims = payload(pair.accessToken)
-        assertEquals(setOf("sub", "iat", "exp", "amr"), claims.keys)
+        assertEquals(setOf("iss", "aud", "sub", "iat", "exp", "amr", "sid"), claims.keys)
         assertEquals(account.toString(), claims.getValue("sub").toString().trim('"'))
         assertEquals(account, t.access.verify(pair.accessToken, t.now))
     }

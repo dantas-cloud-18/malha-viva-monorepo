@@ -23,9 +23,11 @@ sealed interface SetContactResult {
 }
 
 /**
- * Contatos de recuperacao do titular autenticado: cadastro, verificacao e troca. Troca de canal ja
- * verificado exige senha atual, OTP no NOVO canal e 24 h de espera cancelavel; o canal antigo e avisado no
- * inicio e no fim. A troca e aplicada de forma preguicosa ([applyDue]) na proxima leitura ou recuperacao.
+ * Contatos de recuperacao do titular autenticado: cadastro, verificacao e troca. Fora do cadastro, TODA operacao
+ * (primeiro contato, verificacao do contato gravado ou troca) exige a senha atual: um access token roubado nao
+ * basta para plantar um canal de recuperacao. Troca de canal ja verificado exige ainda OTP no NOVO canal e 24 h
+ * de espera cancelavel; os canais ja verificados sao avisados em toda inclusao e troca. A troca e aplicada de
+ * forma preguicosa ([applyDue]) na proxima leitura ou recuperacao.
  * shortcut: sem job periodico; chamar applyDue por varredura se for preciso aplicar sem trafego da conta.
  *
  * Suppress: injecao de dependencias e um unico fluxo de contato; dividir partiria o estado compartilhado.
@@ -53,9 +55,9 @@ class ContactService(
         val info = contacts.find(accountId)
         return when {
             value == null -> SetContactResult.Invalid
-            !info.verified(channel) -> startVerification(accountId, channel, value)
-            value == info.value(channel) -> SetContactResult.Invalid
             !passwordMatches(accountId, currentPassword) -> SetContactResult.BadPassword
+            !info.verified(channel) -> startVerification(accountId, channel, value, SendContext())
+            value == info.value(channel) -> SetContactResult.Invalid
             else -> startChange(accountId, channel, value, info.value(channel))
         }
     }
@@ -65,16 +67,27 @@ class ContactService(
         email: String?,
     ): Boolean = (phone == null || normalizePhone(phone) != null) && (email == null || normalizeEmail(email) != null)
 
-    /** Grava os contatos do cadastro sem verificar e envia o OTP de verificacao de cada um. */
+    /**
+     * Grava os contatos do cadastro sem verificar e envia o OTP de verificacao de cada um, na cota e nos limites
+     * de [SendPurpose.SIGNUP]. E o unico caminho sem senha: a conta acabou de ser criada e nao tem canal verificado.
+     */
     suspend fun registerContacts(
         handle: String,
         phone: String?,
         email: String?,
+        ip: String,
     ) {
         val id = accounts.findByHandle(handle)?.id ?: return
-        phone?.let { set(id, Channel.PHONE, it, null) }
-        email?.let { set(id, Channel.EMAIL, it, null) }
+        val context = SendContext(SendPurpose.SIGNUP, ip)
+        phone?.let { normalizePhone(it)?.let { v -> startVerification(id, Channel.PHONE, v, context) } }
+        email?.let { normalizeEmail(it)?.let { v -> startVerification(id, Channel.EMAIL, v, context) } }
     }
+
+    /** Senha atual confere? Usada tambem pela rota de confirmacao do contato gravado. */
+    fun verifyPassword(
+        accountId: UUID,
+        password: String?,
+    ): Boolean = passwordMatches(accountId, password)
 
     private fun passwordMatches(
         accountId: UUID,
@@ -88,11 +101,26 @@ class ContactService(
         accountId: UUID,
         channel: Channel,
         value: String,
+        context: SendContext,
     ): SetContactResult {
         contacts.store(accountId, channel, value)
         val code = otp.issue(accountId, OtpPurpose.VERIFY_CONTACT, channel, value)
-        gateway.deliver(accountId, channel, value, "Codigo Malha Viva", "Malha Viva: codigo de verificacao $code")
+        val text = "Malha Viva: codigo de verificacao $code"
+        gateway.deliver(accountId, channel, value, "Codigo Malha Viva", text, context)
+        notifyVerified(accountId, "Um novo contato foi adicionado a sua conta. Se nao foi voce, troque sua senha.")
         return SetContactResult.VerificationSent
+    }
+
+    /** Avisa todos os canais JA verificados da conta (o canal que acabou de entrar ainda nao conta). */
+    private suspend fun notifyVerified(
+        accountId: UUID,
+        text: String,
+        except: Channel? = null,
+    ) {
+        val info = contacts.find(accountId)
+        info.verifiedChannels().filter { it != except }.forEach { ch ->
+            info.value(ch)?.let { notify(accountId, ch, it, text) }
+        }
     }
 
     private suspend fun startChange(
@@ -107,6 +135,7 @@ class ContactService(
         val code = otp.issue(accountId, OtpPurpose.CONTACT_CHANGE, channel, change.id.toString())
         gateway.deliver(accountId, channel, value, "Codigo Malha Viva", "Malha Viva: codigo para trocar contato $code")
         oldValue?.let { notify(accountId, channel, it, "Pedido de troca deste contato. Vale em 24 h; cancele no app.") }
+        notifyVerified(accountId, "Pedido de troca de contato. Vale em 24 h; cancele no app.", except = channel)
         return SetContactResult.ChangePending(change.id, change.effectiveAt)
     }
 

@@ -15,6 +15,8 @@ private const val TOTP_DIGITS = 6
 private const val SECRET_BYTES = 20
 private const val GCM_IV_BYTES = 12
 private const val GCM_TAG_BITS = 128
+const val TOTP_MAX_FAILURES = 10
+const val TOTP_LOCK_MS = 15 * 60_000L
 private const val BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 private const val LOW_NIBBLE = 0x0f
 private const val BYTE_MASK = 0xff
@@ -82,11 +84,30 @@ object Totp {
     }
 }
 
+private fun lockedSeconds(
+    rec: TotpRecord?,
+    nowMs: Long,
+): Long {
+    val left = (rec?.lockedUntilMs ?: 0L) - nowMs
+    return if (left > 0) (left + MS_PER_SECOND - 1) / MS_PER_SECOND else 0L
+}
+
+/** Linha do TOTP da conta. [failedAttempts] e [lockedUntilMs] sao a trava por conta (V7). */
 class TotpRecord(
     val secretEnc: ByteArray,
     val enabled: Boolean,
     val lastStep: Long,
-)
+    val failedAttempts: Int = 0,
+    val lockedUntilMs: Long = 0L,
+) {
+    fun copy(
+        secretEnc: ByteArray = this.secretEnc,
+        enabled: Boolean = this.enabled,
+        lastStep: Long = this.lastStep,
+        failedAttempts: Int = this.failedAttempts,
+        lockedUntilMs: Long = this.lockedUntilMs,
+    ) = TotpRecord(secretEnc, enabled, lastStep, failedAttempts, lockedUntilMs)
+}
 
 interface TotpRepository {
     fun find(accountId: UUID): TotpRecord?
@@ -111,6 +132,17 @@ interface TotpRepository {
 
     /** Apaga o segredo (desliga o 2FA). */
     fun delete(accountId: UUID)
+
+    /** Soma um erro; ao chegar em [maxFailures] trava ate `nowMs + lockMs` e zera o contador (atomico). */
+    fun recordFailure(
+        accountId: UUID,
+        nowMs: Long,
+        maxFailures: Int,
+        lockMs: Long,
+    )
+
+    /** Acerto: zera o contador e a trava. */
+    fun clearFailures(accountId: UUID)
 }
 
 class TotpEnrollment(
@@ -122,6 +154,10 @@ class TotpEnrollment(
  * Enrolamento e verificacao de TOTP. O segredo e guardado cifrado (AES-GCM, chave derivada de
  * MALHAVIVA_OTP_KEY, ligada ao id da conta) e nunca e logado, assim como os codigos.
  * Integrado ao login por [br.malhaviva.auth.MfaService].
+ *
+ * Forca bruta: cada erro (login, confirmacao ou desligamento) conta no contador PERSISTENTE da conta; com
+ * [TOTP_MAX_FAILURES] erros a conta trava por [TOTP_LOCK_MS], qualquer que seja o IP ou o `mfa_token`. Travada,
+ * nem o codigo certo e aceito. Acerto zera o contador.
  */
 class TotpService(
     private val repo: TotpRepository,
@@ -165,6 +201,26 @@ class TotpService(
 
     fun isEnabled(accountId: UUID): Boolean = repo.find(accountId)?.enabled == true
 
+    /** Segundos que faltam para a trava da conta acabar; 0 se livre. */
+    fun lockedSeconds(accountId: UUID): Long = lockedSeconds(repo.find(accountId), clock())
+
+    /** Confere o codigo contra o segredo e atualiza o contador por conta; [accept] grava o efeito do acerto. */
+    private fun counted(
+        accountId: UUID,
+        rec: TotpRecord,
+        code: String,
+        accept: (Long) -> Boolean,
+    ): Boolean {
+        val step = Totp.verify(decrypt(accountId, rec.secretEnc), code, clock(), rec.lastStep)
+        val ok = step != null && accept(step)
+        if (!ok) {
+            repo.recordFailure(accountId, clock(), TOTP_MAX_FAILURES, TOTP_LOCK_MS)
+        } else if (rec.failedAttempts > 0 || rec.lockedUntilMs > 0) {
+            repo.clearFailures(accountId)
+        }
+        return ok
+    }
+
     /** Novo segredo, ainda inativo ate [confirm]. Null se o 2FA ja esta ativo. */
     fun enroll(
         accountId: UUID,
@@ -184,10 +240,12 @@ class TotpService(
         accountId: UUID,
         code: String,
     ): Boolean {
-        val rec = repo.find(accountId)?.takeIf { !it.enabled }
-        val step = rec?.let { Totp.verify(decrypt(accountId, it.secretEnc), code, clock(), it.lastStep) }
-        if (step != null) repo.enable(accountId, step)
-        return step != null
+        val rec = repo.find(accountId)?.takeIf { !it.enabled && lockedSeconds(it, clock()) == 0L }
+        return rec != null &&
+            counted(accountId, rec, code) {
+                repo.enable(accountId, it)
+                true
+            }
     }
 
     /** Verifica um codigo de login; cada passo vale uma unica vez. */
@@ -195,9 +253,8 @@ class TotpService(
         accountId: UUID,
         code: String,
     ): Boolean {
-        val rec = repo.find(accountId)?.takeIf { it.enabled }
-        val step = rec?.let { Totp.verify(decrypt(accountId, it.secretEnc), code, clock(), it.lastStep) }
-        return rec != null && step != null && repo.advance(accountId, rec.lastStep, step)
+        val rec = repo.find(accountId)?.takeIf { it.enabled && lockedSeconds(it, clock()) == 0L }
+        return rec != null && counted(accountId, rec, code) { repo.advance(accountId, rec.lastStep, it) }
     }
 
     /** Desliga com um codigo valido e ainda nao usado. */

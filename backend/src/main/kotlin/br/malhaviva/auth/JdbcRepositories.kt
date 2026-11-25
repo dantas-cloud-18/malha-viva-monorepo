@@ -46,6 +46,19 @@ class JdbcAccountRepository(
             it.update("UPDATE accounts SET password_hash = ? WHERE account_id = ?", passwordHash, accountId)
         }
     }
+
+    override fun consumeAdminEnrollCode(
+        accountId: UUID,
+        codeHash: String,
+    ): Boolean =
+        dataSource.read {
+            it.update(
+                "UPDATE accounts SET admin_enroll_hash = NULL " +
+                    "WHERE account_id = ? AND role = 'admin' AND admin_enroll_hash = ?",
+                accountId,
+                codeHash,
+            )
+        } == 1
 }
 
 private fun Connection.insertToken(t: RefreshRecord) =
@@ -153,6 +166,11 @@ class JdbcSessionRepository(
             c.update("UPDATE devices SET revoked_at = ? WHERE account_id = ? AND revoked_at IS NULL", now, accountId)
         }
     }
+
+    override fun isFamilyActive(familyId: UUID): Boolean =
+        dataSource.read {
+            it.exists("SELECT 1 FROM devices WHERE device_id = ? AND revoked_at IS NULL", familyId)
+        }
 
     override fun listDevices(accountId: UUID): List<DeviceRecord> =
         dataSource.read {

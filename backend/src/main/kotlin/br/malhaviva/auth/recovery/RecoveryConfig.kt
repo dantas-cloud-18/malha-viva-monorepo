@@ -18,6 +18,10 @@ private const val SENDER_ENV = "MALHAVIVA_MESSAGE_SENDER"
 private const val SHOW_OTP_ENV = "MALHAVIVA_DEV_SHOW_OTP"
 private const val SMS_CEILING_ENV = "MALHAVIVA_SMS_DAILY_CEILING"
 private const val EMAIL_CEILING_ENV = "MALHAVIVA_EMAIL_DAILY_CEILING"
+private const val SMS_RECOVERY_CEILING_ENV = "MALHAVIVA_SMS_RECOVERY_CEILING"
+private const val EMAIL_RECOVERY_CEILING_ENV = "MALHAVIVA_EMAIL_RECOVERY_CEILING"
+private const val SMS_SIGNUP_CEILING_ENV = "MALHAVIVA_SMS_SIGNUP_CEILING"
+private const val EMAIL_SIGNUP_CEILING_ENV = "MALHAVIVA_EMAIL_SIGNUP_CEILING"
 
 /**
  * Monta a recuperacao para producao. Falta de MALHAVIVA_OTP_KEY derruba a inicializacao (fail-closed).
@@ -43,9 +47,22 @@ object RecoveryConfig {
     ): SendLimits =
         SendLimits(
             clock = clock,
-            sms = SpendCeiling("sms", env(SMS_CEILING_ENV)?.toIntOrNull() ?: DEFAULT_SMS_DAILY_CEILING, clock),
-            email = SpendCeiling("email", env(EMAIL_CEILING_ENV)?.toIntOrNull() ?: DEFAULT_EMAIL_DAILY_CEILING, clock),
+            sms = ceiling(env, "sms", SMS_CEILING_ENV, DEFAULT_SMS_DAILY_CEILING, clock),
+            email = ceiling(env, "email", EMAIL_CEILING_ENV, DEFAULT_EMAIL_DAILY_CEILING, clock),
+            recoverySms = ceiling(env, "sms-recovery", SMS_RECOVERY_CEILING_ENV, DEFAULT_RECOVERY_SMS_CEILING, clock),
+            recoveryEmail =
+                ceiling(env, "email-recovery", EMAIL_RECOVERY_CEILING_ENV, DEFAULT_RECOVERY_EMAIL_CEILING, clock),
+            signupSms = ceiling(env, "sms-signup", SMS_SIGNUP_CEILING_ENV, DEFAULT_SIGNUP_SMS_CEILING, clock),
+            signupEmail = ceiling(env, "email-signup", EMAIL_SIGNUP_CEILING_ENV, DEFAULT_SIGNUP_EMAIL_CEILING, clock),
         )
+
+    private fun ceiling(
+        env: (String) -> String?,
+        name: String,
+        key: String,
+        default: Int,
+        clock: () -> Long,
+    ) = SpendCeiling(name, env(key)?.toIntOrNull() ?: default, clock)
 
     /** Tarefas de segundo plano da recuperacao; falhas logam so o tipo da excecao (sem dado pessoal). */
     fun backgroundLauncher(): (suspend () -> Unit) -> Unit {

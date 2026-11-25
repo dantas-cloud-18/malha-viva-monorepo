@@ -28,6 +28,7 @@ dependencies {
     implementation(libs.ktor.server.netty)
     implementation(libs.ktor.server.content.negotiation)
     implementation(libs.ktor.server.status.pages)
+    implementation(libs.ktor.server.forwarded.header)
     implementation(libs.ktor.server.sse)
     implementation(libs.ktor.serialization.json)
     implementation(libs.flyway.core)
@@ -37,6 +38,7 @@ dependencies {
     implementation(libs.logback)
     implementation(libs.bouncycastle)
     implementation(libs.zxcvbn)
+    implementation(libs.caffeine)
 
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test)

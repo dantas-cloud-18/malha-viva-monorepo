@@ -44,6 +44,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 private const val STEP_MS = 30_000L
+private const val ADMIN_ENROLL_CODE = "codigo-admin-de-teste-0123456789abcdef"
 private const val BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 
 /** Base32 sem padding, so para gerar codigos nos testes. */
@@ -111,15 +112,19 @@ class MfaRoutesTest {
     ) {
         val created = post("/auth/accounts", """{"handle":"$handle","password":"$STRONG_PASSWORD"}""")
         assertEquals(HttpStatusCode.Created, created.status)
-        t.accounts.setRole(t.accounts.findByHandle(handle)!!.id, role)
+        val id = t.accounts.findByHandle(handle)!!.id
+        t.accounts.setRole(id, role)
+        // passo manual do operador: o codigo de enrolamento sai junto com a promocao
+        if (role == ROLE_ADMIN) t.accounts.setAdminEnrollCode(id, ADMIN_ENROLL_CODE)
     }
 
     /** Enrola e confirma com o codigo do passo atual; devolve o segredo. */
     private suspend fun ApplicationTestBuilder.enable(
         t: TestAuth,
         access: String,
+        enrollmentCode: String? = null,
     ): ByteArray {
-        val started = post("/me/mfa/totp", "{}", access)
+        val started = post("/me/mfa/totp", enrollmentCode?.let { """{"enrollment_code":"$it"}""" } ?: "{}", access)
         assertEquals(HttpStatusCode.Created, started.status)
         val body = started.obj()
         assertTrue(body.str("otpauth_uri").startsWith("otpauth://totp/"))
@@ -248,7 +253,7 @@ class MfaRoutesTest {
             assertEquals(HttpStatusCode.Unauthorized, get("/me/devices", restricted).status)
             assertEquals(HttpStatusCode.Unauthorized, get("/admin/ping", restricted).status)
 
-            val secret = enable(t, restricted)
+            val secret = enable(t, restricted, ADMIN_ENROLL_CODE)
             t.now += STEP_MS
             val token = login("@chefe").obj().str("mfa_token")
             val tokens = mfa(token, code(secret, t.now)).obj()
@@ -295,8 +300,10 @@ class MfaRoutesTest {
             assertEquals(RegisterResult.Created, t.components.auth.register("@admin_rec", STRONG_PASSWORD))
             val id = t.accounts.findByHandle("@admin_rec")!!.id
             t.accounts.setRole(id, ROLE_ADMIN)
+            t.accounts.setAdminEnrollCode(id, ADMIN_ENROLL_CODE)
             r.contacts.setVerified(id, Channel.PHONE, FAKE_PHONE, Instant.EPOCH)
-            val secret = base32Decode(t.mfa.enroll(id)!!.secretBase32)
+            val started = assertIs<TotpEnrollResult.Started>(t.mfa.enroll(id, ADMIN_ENROLL_CODE))
+            val secret = base32Decode(started.enrollment.secretBase32)
             assertTrue(t.mfa.confirm(id, code(secret, t.now)))
 
             r.service.request("10.0.0.9", "@admin_rec", null)

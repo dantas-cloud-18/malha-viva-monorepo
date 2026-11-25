@@ -1,13 +1,16 @@
 package br.malhaviva.tracking.ingest
 
+import br.malhaviva.platform.DEFAULT_MAX_KEYS
+import br.malhaviva.platform.ExpiringMap
 import br.malhaviva.tracking.live.Direction
 import br.malhaviva.tracking.live.LineKey
 import br.malhaviva.tracking.live.LiveHub
 import br.malhaviva.tracking.live.PassengerPosition
+import com.github.benmanes.caffeine.cache.Ticker
 import kotlinx.serialization.json.Json
+import java.time.Duration
 import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
-import java.util.concurrent.ConcurrentHashMap
 
 const val MAX_BODY_BYTES = 128 * 1024
 
@@ -22,6 +25,9 @@ private const val MAX_BEARING_DEG = 360.0
 private const val MAX_LAT = 90.0
 private const val MAX_LON = 180.0
 private val NONCE_LENGTH = 16..64
+
+// lote com mais de 10 min e STALE: depois disso o estado da epoca nao protege mais nada
+private val EPOCH_STATE_TTL: Duration = Duration.ofMinutes(15)
 
 private const val TOKEN_CAPACITY = 10.0
 private const val TOKEN_REFILL_PER_S = 0.2
@@ -58,7 +64,10 @@ private data class EpochState(
 /**
  * Pipeline do lote: limites, token, assinatura, JSON, validacao das amostras e envio ao LiveHub.
  * Nunca registra em log nem devolve posicoes.
+ *
+ * Suppress: injecao de dependencias (o ticker so existe para testar a expiracao) e um unico pipeline de lote.
  */
+@Suppress("LongParameterList", "TooManyFunctions")
 class BatchIngestor(
     private val tokens: TelemetryTokenStore,
     private val geometry: CorridorGeometry,
@@ -66,13 +75,22 @@ class BatchIngestor(
     private val nonces: NonceStore = InMemoryNonceStore(),
     private val limiters: IngestLimiters = IngestLimiters(),
     private val clock: () -> Long = System::currentTimeMillis,
+    ticker: Ticker = Ticker.systemTicker(),
 ) {
-    // shortcut: entradas nunca expiram (uma por epoca), um no so; podar por TTL ou usar Valkey em producao.
-    private val epochs = ConcurrentHashMap<String, EpochState>()
+    // expira por inatividade e tem teto. shortcut: um no so; usar Valkey em producao.
+    private val epochStore = ExpiringMap<String, EpochState>(DEFAULT_MAX_KEYS, EPOCH_STATE_TTL, ticker)
+    private val epochs get() = epochStore.map
+
+    /** Epocas com estado vivo (para testes e metricas). */
+    fun trackedEpochs(): Long = epochStore.size()
+
+    /** Limite por IP, cobrado pela rota ANTES de ler o corpo (a chave nao depende dele). */
+    fun admitIp(ip: String) {
+        reject(limiters.perIp.tryAcquire("ip:$ip", clock()), TOO_MANY, "Too many requests")
+    }
 
     fun ingest(req: IngestRequest): BatchResult {
         val now = clock()
-        reject(limiters.perIp.tryAcquire("ip:${req.clientIp}", now), TOO_MANY, "Too many requests")
         val token = lookupToken(req.bearer, now)
         reject(limiters.perToken.tryAcquire("tk:${token.tokenId}", now), TOO_MANY, "Too many requests")
         reject(req.body.size <= MAX_BODY_BYTES, BAD_REQUEST, "Body too large")

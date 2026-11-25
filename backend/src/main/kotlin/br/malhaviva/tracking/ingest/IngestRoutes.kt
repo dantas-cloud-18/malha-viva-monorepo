@@ -1,27 +1,26 @@
 package br.malhaviva.tracking.ingest
 
 import br.malhaviva.Problem
+import br.malhaviva.platform.clientIp
+import br.malhaviva.platform.readCapped
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.header
-import io.ktor.server.request.receiveChannel
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.RoutingCall
 import io.ktor.server.routing.post
-import io.ktor.utils.io.readRemaining
-import kotlinx.io.readByteArray
 
 private const val BEARER_PREFIX = "Bearer "
 private const val RETRY_AFTER_S = "5"
 private const val TOO_MANY = 429
 
-/** IP do vizinho de rede; atras de proxy, instalar tratamento de X-Forwarded-For antes. */
+/** O IP vem do helper unico [clientIp] (XForwardedHeaders atras do ALB). */
 private fun RoutingCall.toIngestRequest(body: ByteArray) =
     IngestRequest(
         bearer = request.header(HttpHeaders.Authorization)?.removePrefix(BEARER_PREFIX)?.takeIf { it.isNotBlank() },
-        clientIp = request.local.remoteAddress,
+        clientIp = clientIp(),
         timestamp = request.header("X-Timestamp"),
         nonce = request.header("X-Nonce"),
         signature = request.header("X-Signature"),
@@ -30,9 +29,10 @@ private fun RoutingCall.toIngestRequest(body: ByteArray) =
 
 fun Route.ingestRoutes(ingestor: BatchIngestor) {
     post("/telemetry/batches") {
-        // le no maximo MAX_BODY_BYTES + 1: o excesso e rejeitado sem carregar o corpo todo
-        val body = call.receiveChannel().readRemaining(MAX_BODY_BYTES + 1L).readByteArray()
         try {
+            // limite por IP antes de ler o corpo; a leitura para em MAX_BODY_BYTES + 1 (excesso nao e carregado)
+            ingestor.admitIp(call.clientIp())
+            val body = call.readCapped(MAX_BODY_BYTES)
             call.respond(HttpStatusCode.Accepted, ingestor.ingest(call.toIngestRequest(body)))
         } catch (e: IngestRejected) {
             if (e.status == TOO_MANY) call.response.header(HttpHeaders.RetryAfter, RETRY_AFTER_S)

@@ -255,13 +255,16 @@ class JdbcTotpRepository(
         dataSource
             .read {
                 it.queryList(
-                    "SELECT secret_enc, enabled_at, last_step FROM totp_secrets WHERE account_id = ?",
+                    "SELECT secret_enc, enabled_at, last_step, failed_attempts, locked_until " +
+                        "FROM totp_secrets WHERE account_id = ?",
                     accountId,
                 ) { rs ->
                     TotpRecord(
                         rs.getBytes("secret_enc"),
                         rs.getTimestamp("enabled_at") != null,
                         rs.getLong("last_step"),
+                        rs.getInt("failed_attempts"),
+                        rs.getTimestamp("locked_until")?.time ?: 0L,
                     )
                 }
             }.firstOrNull()
@@ -306,5 +309,35 @@ class JdbcTotpRepository(
 
     override fun delete(accountId: UUID) {
         dataSource.read { it.update("DELETE FROM totp_secrets WHERE account_id = ?", accountId) }
+    }
+
+    override fun recordFailure(
+        accountId: UUID,
+        nowMs: Long,
+        maxFailures: Int,
+        lockMs: Long,
+    ) {
+        // um unico UPDATE: dois erros simultaneos nunca perdem contagem
+        dataSource.read {
+            it.update(
+                "UPDATE totp_secrets SET " +
+                    "locked_until = CASE WHEN failed_attempts + 1 >= ? THEN ? ELSE locked_until END, " +
+                    "failed_attempts = CASE WHEN failed_attempts + 1 >= ? THEN 0 ELSE failed_attempts + 1 END " +
+                    "WHERE account_id = ?",
+                maxFailures,
+                Instant.ofEpochMilli(nowMs + lockMs),
+                maxFailures,
+                accountId,
+            )
+        }
+    }
+
+    override fun clearFailures(accountId: UUID) {
+        dataSource.read {
+            it.update(
+                "UPDATE totp_secrets SET failed_attempts = 0, locked_until = NULL WHERE account_id = ?",
+                accountId,
+            )
+        }
     }
 }

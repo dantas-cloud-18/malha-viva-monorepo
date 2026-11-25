@@ -9,12 +9,18 @@ private val log = LoggerFactory.getLogger("br.malhaviva.auth.recovery.SendGuard"
 private const val MS_PER_DAY = 86_400_000L
 const val DEFAULT_SMS_DAILY_CEILING = 500
 const val DEFAULT_EMAIL_DAILY_CEILING = 2000
+const val DEFAULT_RECOVERY_SMS_CEILING = 200
+const val DEFAULT_RECOVERY_EMAIL_CEILING = 1000
+const val DEFAULT_SIGNUP_SMS_CEILING = 200
+const val DEFAULT_SIGNUP_EMAIL_CEILING = 1000
 private const val DDI_CAPACITY = 20.0
 private const val DDI_REFILL_PER_S = 1.0 / 60
 private const val TARGET_CAPACITY = 3.0
 private const val TARGET_REFILL_PER_S = 1.0 / 600
 private const val ACCOUNT_CAPACITY = 6.0
 private const val ACCOUNT_REFILL_PER_S = 1.0 / 600
+private const val SIGNUP_IP_CAPACITY = 6.0
+private const val SIGNUP_IP_REFILL_PER_S = 1.0 / 600
 private const val MAX_DDI_DIGITS = 3
 
 // shortcut: tabela parcial de DDIs de 2 digitos; DDI de 1 digito so 1 e 7; o resto cai em 3 digitos.
@@ -110,7 +116,33 @@ class SpendCeiling(
     }
 }
 
-/** Anti-SMS pumping: limite por DDI, por numero (ou e-mail), por conta e teto diario por canal. */
+/** Para que serve a mensagem: cada finalidade tem cota propria, entao uma nao esgota a outra. */
+enum class SendPurpose {
+    /** OTP de recuperacao para canal ja verificado: cota reservada, nenhum outro envio a consome. */
+    RECOVERY,
+
+    /** OTP de verificacao do cadastro: cota, DDI, alvo e IP proprios; exige CAPTCHA antes (na rota). */
+    SIGNUP,
+
+    /** Demais envios (avisos, verificacao e troca de contato do titular autenticado). */
+    OTHER,
+}
+
+/** Finalidade e IP de origem de uma mensagem; o IP so conta para [SendPurpose.SIGNUP]. */
+data class SendContext(
+    val purpose: SendPurpose = SendPurpose.OTHER,
+    val ip: String? = null,
+)
+
+/**
+ * Anti-SMS pumping: limite por DDI, por numero (ou e-mail), por conta e teto diario por canal, em baldes SEPARADOS
+ * por finalidade. Recuperacao tem DDI, alvo e teto reservados ([ddi], [target], [recoverySms], [recoveryEmail]);
+ * cadastro e demais envios usam os baldes `open*` e tetos proprios, e o cadastro ainda tem limite por IP. Assim
+ * encher o cadastro (ou os avisos) nunca bloqueia a recuperacao de quem ja tem canal verificado.
+ *
+ * Suppress: configuracao por finalidade com padroes; agrupar so deslocaria os parametros do construtor.
+ */
+@Suppress("LongParameterList")
 class SendLimits(
     private val clock: () -> Long = System::currentTimeMillis,
     private val ddi: RateLimiter = RateLimiter(DDI_CAPACITY, DDI_REFILL_PER_S),
@@ -118,19 +150,45 @@ class SendLimits(
     private val account: RateLimiter = RateLimiter(ACCOUNT_CAPACITY, ACCOUNT_REFILL_PER_S),
     private val sms: SpendCeiling = SpendCeiling("sms", DEFAULT_SMS_DAILY_CEILING, clock),
     private val email: SpendCeiling = SpendCeiling("email", DEFAULT_EMAIL_DAILY_CEILING, clock),
+    private val recoverySms: SpendCeiling = SpendCeiling("sms-recovery", DEFAULT_RECOVERY_SMS_CEILING, clock),
+    private val recoveryEmail: SpendCeiling = SpendCeiling("email-recovery", DEFAULT_RECOVERY_EMAIL_CEILING, clock),
+    private val signupSms: SpendCeiling = SpendCeiling("sms-signup", DEFAULT_SIGNUP_SMS_CEILING, clock),
+    private val signupEmail: SpendCeiling = SpendCeiling("email-signup", DEFAULT_SIGNUP_EMAIL_CEILING, clock),
+    private val openDdi: RateLimiter = RateLimiter(DDI_CAPACITY, DDI_REFILL_PER_S),
+    private val openTarget: RateLimiter = RateLimiter(TARGET_CAPACITY, TARGET_REFILL_PER_S),
+    private val signupIp: RateLimiter = RateLimiter(SIGNUP_IP_CAPACITY, SIGNUP_IP_REFILL_PER_S),
 ) {
     /** Chaves de limite nunca guardam o contato em claro: so o SHA-256. */
     fun allow(
         accountId: UUID,
         channel: Channel,
         to: String,
+        context: SendContext = SendContext(),
     ): Boolean {
         val now = clock()
-        val ddiOk = channel != Channel.PHONE || ddi.tryAcquire("ddi:${callingCode(to)}", now)
+        val recovery = context.purpose == SendPurpose.RECOVERY
+        val ddiOk = channel != Channel.PHONE || (if (recovery) ddi else openDdi).tryAcquire(ddiKey(to), now)
+        val ipOk =
+            context.purpose != SendPurpose.SIGNUP || context.ip == null || signupIp.tryAcquire("ip:${context.ip}", now)
         return ddiOk &&
-            target.tryAcquire("t:${sha256Hex(to)}", now) &&
+            ipOk &&
+            (if (recovery) target else openTarget).tryAcquire("t:${sha256Hex(to)}", now) &&
             account.tryAcquire("a:$accountId", now) &&
-            (if (channel == Channel.PHONE) sms else email).tryConsume()
+            ceiling(context.purpose, channel).tryConsume()
+    }
+
+    private fun ddiKey(to: String) = "ddi:${callingCode(to)}"
+
+    private fun ceiling(
+        purpose: SendPurpose,
+        channel: Channel,
+    ): SpendCeiling {
+        val phone = channel == Channel.PHONE
+        return when (purpose) {
+            SendPurpose.RECOVERY -> if (phone) recoverySms else recoveryEmail
+            SendPurpose.SIGNUP -> if (phone) signupSms else signupEmail
+            SendPurpose.OTHER -> if (phone) sms else email
+        }
     }
 }
 
@@ -139,14 +197,17 @@ class MessageGateway(
     private val sender: MessageSender,
     private val limits: SendLimits,
 ) {
+    // assinatura de envio: agrupar so deslocaria os parametros
+    @Suppress("LongParameterList")
     suspend fun deliver(
         accountId: UUID,
         channel: Channel,
         to: String,
         subject: String,
         text: String,
+        context: SendContext = SendContext(),
     ): Boolean =
-        if (limits.allow(accountId, channel, to)) {
+        if (limits.allow(accountId, channel, to, context)) {
             try {
                 if (channel == Channel.PHONE) sender.sendSms(to, text) else sender.sendEmail(to, subject, text)
                 true

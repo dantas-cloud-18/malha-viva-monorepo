@@ -1,22 +1,21 @@
 package br.malhaviva.auth
 
 import br.malhaviva.auth.recovery.recoveryRoutes
+import br.malhaviva.platform.DEFAULT_MAX_BODY_BYTES
+import br.malhaviva.platform.clientIp
+import br.malhaviva.platform.readBoundedOrNull
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.request.receive
+import io.ktor.serialization.kotlinx.json.DefaultJson
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.RoutingCall
-import io.ktor.server.routing.delete
-import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.util.UUID
 
-private const val MAX_HANDLE_LENGTH = 64
-private const val MAX_TOKEN_LENGTH = 512
 private const val RETRY_AFTER_LIMIT_S = "60"
 
 @Serializable
@@ -26,19 +25,8 @@ private class CreateAccountDto(
     // canais de recuperacao: gravados sem verificar e verificados por OTP quando a recuperacao esta ligada
     val phone: String? = null,
     val email: String? = null,
-)
-
-@Serializable
-private class LoginDto(
-    val handle: String,
-    val password: String,
-    @SerialName("device_label") val deviceLabel: String? = null,
+    // exigido quando ha telefone ou e-mail: o cadastro envia SMS/e-mail de verificacao
     @SerialName("captcha_token") val captchaToken: String? = null,
-)
-
-@Serializable
-private class RefreshDto(
-    @SerialName("refresh_token") val refreshToken: String,
 )
 
 @Serializable
@@ -51,14 +39,6 @@ private class ContactsVerified(
 private class AccountDto(
     val handle: String,
     @SerialName("contacts_verified") val contactsVerified: ContactsVerified = ContactsVerified(),
-)
-
-@Serializable
-private class DeviceDto(
-    val id: String,
-    val label: String,
-    @SerialName("created_at") val createdAt: String,
-    @SerialName("last_used_at") val lastUsedAt: String,
 )
 
 @Serializable
@@ -80,10 +60,19 @@ internal suspend fun RoutingCall.throttled(retryAfterSeconds: String = RETRY_AFT
     problem(HttpStatusCode.TooManyRequests, "Too many requests")
 }
 
-/** Corpo invalido vira null (400); nunca propaga excecao com trecho do corpo. */
-internal suspend inline fun <reified T : Any> RoutingCall.body(): T? = runCatching { receive<T>() }.getOrNull()
-
-internal fun RoutingCall.ip(): String = request.local.remoteAddress
+/**
+ * Le o corpo JSON com teto de [DEFAULT_MAX_BODY_BYTES] (le no maximo teto + 1 byte do canal). Maior que o teto
+ * responde 413; JSON invalido chega ao [block] como null (400); nunca propaga excecao com trecho do corpo.
+ * As rotas consultam os limitadores que nao dependem do corpo ANTES de chamar isto.
+ */
+internal suspend inline fun <reified T : Any> RoutingCall.withBody(block: (T?) -> Unit) {
+    val bytes = readBoundedOrNull()
+    if (bytes == null) {
+        problem(HttpStatusCode.PayloadTooLarge, "Payload too large")
+    } else {
+        block(runCatching { DefaultJson.decodeFromString<T>(bytes.decodeToString()) }.getOrNull())
+    }
+}
 
 /** Token completo valido (nunca o restrito `mfa_enroll_only`); senao 401 e null. */
 suspend fun RoutingCall.accountIdOrUnauthorized(
@@ -92,42 +81,39 @@ suspend fun RoutingCall.accountIdOrUnauthorized(
 ): UUID? = principalOrUnauthorized(access, clock)?.accountId
 
 fun Route.authRoutes(c: AuthComponents) {
-    post("/auth/accounts") {
-        val dto = call.body<CreateAccountDto>()
-        when {
-            !c.limiters.signup.tryAcquire("ip:${call.ip()}", c.clock()) -> call.throttled()
-            dto == null -> call.problem(HttpStatusCode.BadRequest, "Malformed request")
-            c.recovery?.contacts?.validSignupContacts(dto.phone, dto.email) == false ->
-                call.problem(HttpStatusCode.BadRequest, "Invalid contact", "invalid_contact")
-            else -> registerAccount(call, c, dto)
-        }
-    }
-    post("/auth/token") { loginRoute(call, c) }
-    post("/auth/refresh") {
-        val dto = call.body<RefreshDto>()
-        if (!c.limiters.ip.tryAcquire("ip:${call.ip()}", c.clock())) {
-            call.throttled()
-        } else {
-            val pair =
-                dto?.takeIf { it.refreshToken.length <= MAX_TOKEN_LENGTH }?.let {
-                    c.sessions.refresh(
-                        it.refreshToken,
-                    )
-                }
-            if (pair == null) call.problem(HttpStatusCode.Unauthorized, "Invalid token") else call.respond(pair)
-        }
-    }
-    post("/auth/logout") {
-        call
-            .body<RefreshDto>()
-            ?.refreshToken
-            ?.takeIf { it.length <= MAX_TOKEN_LENGTH }
-            ?.let(c.sessions::logout)
-        call.respond(HttpStatusCode.NoContent)
-    }
-    deviceRoutes(c)
+    post("/auth/accounts") { signupRoute(call, c) }
+    sessionRoutes(c)
     mfaRoutes(c)
     c.recovery?.let { recoveryRoutes(c, it) }
+}
+
+private suspend fun signupRoute(
+    call: RoutingCall,
+    c: AuthComponents,
+) {
+    if (!c.limiters.signup.tryAcquire("ip:${call.clientIp()}", c.clock())) {
+        call.throttled()
+    } else {
+        call.withBody<CreateAccountDto> { dto -> respondSignup(call, c, dto) }
+    }
+}
+
+private suspend fun respondSignup(
+    call: RoutingCall,
+    c: AuthComponents,
+    dto: CreateAccountDto?,
+) {
+    val contacts = c.recovery?.contacts
+    val sendsMessages = dto != null && (dto.phone != null || dto.email != null)
+    when {
+        dto == null -> call.problem(HttpStatusCode.BadRequest, "Malformed request")
+        contacts?.validSignupContacts(dto.phone, dto.email) == false ->
+            call.problem(HttpStatusCode.BadRequest, "Invalid contact", "invalid_contact")
+        // o cadastro com contato dispara SMS/e-mail: CAPTCHA antes de gastar a cota de envio
+        contacts != null && sendsMessages && !c.auth.captchaOk(dto.captchaToken, call.clientIp()) ->
+            call.problem(HttpStatusCode.Forbidden, "Captcha required", "captcha_required")
+        else -> registerAccount(call, c, dto)
+    }
 }
 
 private suspend fun registerAccount(
@@ -136,7 +122,9 @@ private suspend fun registerAccount(
     dto: CreateAccountDto,
 ) {
     val result = c.auth.register(dto.handle, dto.password)
-    if (result == RegisterResult.Created) c.recovery?.contacts?.registerContacts(dto.handle, dto.phone, dto.email)
+    if (result == RegisterResult.Created) {
+        c.recovery?.contacts?.registerContacts(dto.handle, dto.phone, dto.email, call.clientIp())
+    }
     respondRegister(call, result, dto.handle)
 }
 
@@ -151,42 +139,5 @@ private suspend fun respondRegister(
         RegisterResult.HandleTaken -> call.problem(HttpStatusCode.Conflict, "Handle unavailable")
         is RegisterResult.PasswordRejected ->
             call.problem(HttpStatusCode.BadRequest, "Password rejected", result.reason.code)
-    }
-}
-
-private suspend fun loginRoute(
-    call: RoutingCall,
-    c: AuthComponents,
-) {
-    val dto = call.body<LoginDto>()
-    val valid = dto != null && dto.handle.length <= MAX_HANDLE_LENGTH && c.auth.isLoginPasswordSane(dto.password)
-    when {
-        !c.limiters.ip.tryAcquire("ip:${call.ip()}", c.clock()) -> call.throttled()
-        dto == null || !valid -> call.problem(HttpStatusCode.BadRequest, "Malformed request")
-        !c.limiters.handle.tryAcquire("h:${dto.handle.lowercase()}", c.clock()) -> call.throttled()
-        else -> respondLogin(call, c.auth.login(call.ip(), dto.handle, dto.password, dto.deviceLabel, dto.captchaToken))
-    }
-}
-
-private fun Route.deviceRoutes(c: AuthComponents) {
-    get("/me/devices") {
-        call.accountIdOrUnauthorized(c.access, c.clock)?.let { id ->
-            val devices =
-                c.sessions.listDevices(id).map {
-                    DeviceDto(it.id.toString(), it.label, it.createdAt.toString(), it.lastUsedAt.toString())
-                }
-            call.respond(devices)
-        }
-    }
-    delete("/me/devices/{deviceId}") {
-        call.accountIdOrUnauthorized(c.access, c.clock)?.let { id ->
-            val deviceId = runCatching { UUID.fromString(call.parameters["deviceId"]) }.getOrNull()
-            // dispositivo alheio e inexistente respondem igual: 404, sem vazar existencia (anti-IDOR)
-            if (deviceId != null && c.sessions.revokeDevice(id, deviceId)) {
-                call.respond(HttpStatusCode.NoContent)
-            } else {
-                call.problem(HttpStatusCode.NotFound, "Not found")
-            }
-        }
     }
 }

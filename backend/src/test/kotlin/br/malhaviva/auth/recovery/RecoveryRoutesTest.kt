@@ -78,7 +78,8 @@ class RecoveryRoutesTest {
         phone: String = FAKE_PHONE,
         email: String = FAKE_EMAIL,
     ): HttpResponse {
-        val extra = if (withContacts) ""","phone":"$phone","email":"$email"""" else ""
+        val extra =
+            if (withContacts) ""","phone":"$phone","email":"$email","captcha_token":"ok"""" else ""
         return post("/auth/accounts", """{"handle":"$handle","password":"$STRONG_PASSWORD"$extra}""")
     }
 
@@ -95,7 +96,7 @@ class RecoveryRoutesTest {
         code: String,
         changeId: String? = null,
     ): HttpResponse {
-        val change = changeId?.let { ""","change_id":"$it"""" }.orEmpty()
+        val change = changeId?.let { ""","change_id":"$it"""" } ?: ""","current_password":"$STRONG_PASSWORD""""
         return post("/me/contacts/confirm", """{"channel":"${channel.wire}","code":"$code"$change}""", access)
     }
 
@@ -439,7 +440,13 @@ class RecoveryRoutesTest {
     @Test
     fun `spend ceiling stops sending but the request still answers 202`() {
         val t = TestAuth()
-        val limits = SendLimits(clock = { t.now }, sms = SpendCeiling("sms", 1) { t.now }, ddi = RateLimiter(99.0, 1.0))
+        // cota reservada de recuperacao esgotada: o cadastro (cota propria) enviou, a recuperacao nao envia mais
+        val limits =
+            SendLimits(
+                clock = { t.now },
+                recoverySms = SpendCeiling("sms-recovery", 0) { t.now },
+                ddi = RateLimiter(99.0, 1.0),
+            )
         val r = TestRecovery(t, sendLimits = limits)
         app(r) {
             verified(r, "@teto")

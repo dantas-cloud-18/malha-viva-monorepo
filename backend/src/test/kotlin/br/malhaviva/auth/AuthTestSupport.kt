@@ -65,6 +65,27 @@ class InMemoryAccountRepository : AccountRepository {
         rows[accountId] = rows.getValue(accountId).copy(passwordHash = passwordHash)
     }
 
+    private val enrollHashes = HashMap<UUID, String>()
+
+    @Synchronized
+    override fun consumeAdminEnrollCode(
+        accountId: UUID,
+        codeHash: String,
+    ): Boolean {
+        val ok = rows[accountId]?.role == ROLE_ADMIN && enrollHashes[accountId] == codeHash
+        if (ok) enrollHashes.remove(accountId)
+        return ok
+    }
+
+    /** So nos testes: o passo manual do operador grava o hash do codigo junto com o papel admin. */
+    @Synchronized
+    fun setAdminEnrollCode(
+        accountId: UUID,
+        code: String,
+    ) {
+        enrollHashes[accountId] = sha256Hex(code)
+    }
+
     /** So nos testes: promover a admin e manual no banco em producao. */
     @Synchronized
     fun setRole(
@@ -126,6 +147,9 @@ class InMemorySessionRepository : SessionRepository {
     ) {
         devices.values.filter { it.accountId == accountId }.forEach { revokeFamily(it.id, now) }
     }
+
+    @Synchronized
+    override fun isFamilyActive(familyId: UUID) = familyId in devices && familyId !in revokedDevices
 
     @Synchronized
     override fun listDevices(accountId: UUID) =

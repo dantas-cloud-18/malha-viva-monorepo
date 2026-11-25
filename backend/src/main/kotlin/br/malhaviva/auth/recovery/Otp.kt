@@ -132,12 +132,20 @@ class OtpService(
 
     fun consume(record: OtpRecord): Boolean = repo.consume(record.id, now())
 
-    /** Mesmo custo de [check] para conta inexistente (sem consultar nem gravar nada). */
-    fun burnTime(code: String?) {
-        mac(UUID.randomUUID(), OtpPurpose.RECOVERY, Channel.PHONE, "", code.orEmpty())
+    /**
+     * Conta inexistente: mesma consulta ao repositorio e mesmo HMAC de [check] para um canal, contra uma conta
+     * descartavel. So nao grava tentativa (nao ha registro), o que a espera minima do servico cobre.
+     */
+    fun probe(
+        channel: Channel,
+        code: String?,
+    ) {
+        repo.latest(PROBE_ACCOUNT, OtpPurpose.RECOVERY, channel)
+        mac(PROBE_ACCOUNT, OtpPurpose.RECOVERY, channel, "", code.orEmpty())
     }
 
     private companion object {
         const val HEX_RADIX = 16
+        val PROBE_ACCOUNT = UUID(0L, 0L)
     }
 }

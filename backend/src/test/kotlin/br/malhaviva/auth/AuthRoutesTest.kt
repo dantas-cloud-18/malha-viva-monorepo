@@ -131,7 +131,7 @@ class AuthRoutesTest {
             )
             val payloadJson = String(Base64.getUrlDecoder().decode(tokens.str("access_token").split('.')[1]))
             val claims = Json.parseToJsonElement(payloadJson).jsonObject
-            assertEquals(setOf("sub", "iat", "exp", "amr"), claims.keys)
+            assertEquals(setOf("iss", "aud", "sub", "iat", "exp", "amr", "sid"), claims.keys)
             assertFalse(payloadJson.contains("ana", ignoreCase = true))
         }
 

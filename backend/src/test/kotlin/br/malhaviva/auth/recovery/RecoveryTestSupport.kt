@@ -66,8 +66,14 @@ class FakeSender(
 class InMemoryContactRepository : ContactRepository {
     private val rows = HashMap<UUID, ContactInfo>()
 
+    /** Quantas leituras o repositorio recebeu (forma do trabalho do fluxo de recuperacao). */
+    var findCalls = 0
+
     @Synchronized
-    override fun find(accountId: UUID) = rows[accountId] ?: ContactInfo()
+    override fun find(accountId: UUID): ContactInfo {
+        findCalls++
+        return rows[accountId] ?: ContactInfo()
+    }
 
     @Synchronized
     override fun store(
@@ -161,6 +167,9 @@ class InMemoryContactChangeRepository : ContactChangeRepository {
 class InMemoryOtpRepository : OtpRepository {
     val rows = LinkedHashMap<UUID, OtpRecord>()
 
+    /** Quantas consultas de OTP o repositorio recebeu (forma do trabalho do fluxo de recuperacao). */
+    var latestCalls = 0
+
     @Synchronized
     override fun replace(record: OtpRecord) {
         rows.replaceAll { _, r ->
@@ -185,7 +194,10 @@ class InMemoryOtpRepository : OtpRepository {
         accountId: UUID,
         purpose: OtpPurpose,
         channel: Channel,
-    ) = rows.values.lastOrNull { it.accountId == accountId && it.purpose == purpose && it.channel == channel }
+    ): OtpRecord? {
+        latestCalls++
+        return rows.values.lastOrNull { it.accountId == accountId && it.purpose == purpose && it.channel == channel }
+    }
 
     @Synchronized
     override fun addAttempt(id: UUID): Int {
@@ -224,7 +236,7 @@ class InMemoryTotpRepository : TotpRepository {
         accountId: UUID,
         step: Long,
     ) {
-        rows[accountId] = TotpRecord(rows.getValue(accountId).secretEnc, true, step)
+        rows[accountId] = rows.getValue(accountId).copy(enabled = true, lastStep = step)
     }
 
     @Synchronized
@@ -234,13 +246,35 @@ class InMemoryTotpRepository : TotpRepository {
         step: Long,
     ): Boolean {
         val r = rows.getValue(accountId)
-        if (r.lastStep == expectedLast) rows[accountId] = TotpRecord(r.secretEnc, r.enabled, step)
+        if (r.lastStep == expectedLast) rows[accountId] = r.copy(lastStep = step)
         return r.lastStep == expectedLast
     }
 
     @Synchronized
     override fun delete(accountId: UUID) {
         rows.remove(accountId)
+    }
+
+    @Synchronized
+    override fun recordFailure(
+        accountId: UUID,
+        nowMs: Long,
+        maxFailures: Int,
+        lockMs: Long,
+    ) {
+        val r = rows[accountId] ?: return
+        val failed = r.failedAttempts + 1
+        rows[accountId] =
+            if (failed >= maxFailures) {
+                r.copy(failedAttempts = 0, lockedUntilMs = nowMs + lockMs)
+            } else {
+                r.copy(failedAttempts = failed)
+            }
+    }
+
+    @Synchronized
+    override fun clearFailures(accountId: UUID) {
+        rows[accountId]?.let { rows[accountId] = it.copy(failedAttempts = 0, lockedUntilMs = 0L) }
     }
 }
 
@@ -251,6 +285,9 @@ fun roomyLimits(clock: () -> Long) =
         ddi = RateLimiter(1000.0, 1.0),
         target = RateLimiter(1000.0, 1.0),
         account = RateLimiter(1000.0, 1.0),
+        openDdi = RateLimiter(1000.0, 1.0),
+        openTarget = RateLimiter(1000.0, 1.0),
+        signupIp = RateLimiter(1000.0, 1.0),
     )
 
 /** Plano de recuperacao inteiro em memoria, sobre o [TestAuth], com o mesmo relogio. */
@@ -260,6 +297,7 @@ class TestRecovery(
     captcha: CaptchaVerifier = NoopCaptchaVerifier,
     sendLimits: SendLimits = roomyLimits { auth.now },
     limits: RecoveryLimits = RecoveryLimits(),
+    minCompleteMs: Long = 0L,
 ) {
     val fake: FakeSender get() = sender as FakeSender
     val contacts = InMemoryContactRepository()
@@ -282,6 +320,7 @@ class TestRecovery(
             captcha,
             limits,
             { auth.now },
+            minCompleteMs,
             background = { runBlocking { it() } },
         )
     val components =

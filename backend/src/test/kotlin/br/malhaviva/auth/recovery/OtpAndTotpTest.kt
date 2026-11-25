@@ -168,18 +168,19 @@ class OtpAndTotpTest {
                 ddi = RateLimiter(3.0, 0.0001),
                 target = RateLimiter(1.0, 0.0001),
                 account = RateLimiter(100.0, 1.0),
-                sms = SpendCeiling("sms", 3) { now },
+                recoverySms = SpendCeiling("sms-recovery", 3) { now },
             )
         val acc = UUID.randomUUID()
-        assertTrue(limits.allow(acc, Channel.PHONE, "+5521999990001"))
-        assertFalse(limits.allow(acc, Channel.PHONE, "+5521999990001"), "por numero")
-        assertTrue(limits.allow(acc, Channel.PHONE, "+5521999990002"))
-        assertFalse(limits.allow(acc, Channel.PHONE, "+5521999990003"), "por DDI (+55)")
-        assertTrue(limits.allow(acc, Channel.PHONE, "+14155550100"), "outro DDI segue livre")
-        assertFalse(limits.allow(acc, Channel.PHONE, "+14155550101"), "teto diario de 3 SMS")
-        assertTrue(limits.allow(acc, Channel.EMAIL, FAKE_EMAIL), "e-mail tem teto proprio")
+        val recovery = SendContext(SendPurpose.RECOVERY)
+        assertTrue(limits.allow(acc, Channel.PHONE, "+5521999990001", recovery))
+        assertFalse(limits.allow(acc, Channel.PHONE, "+5521999990001", recovery), "por numero")
+        assertTrue(limits.allow(acc, Channel.PHONE, "+5521999990002", recovery))
+        assertFalse(limits.allow(acc, Channel.PHONE, "+5521999990003", recovery), "por DDI (+55)")
+        assertTrue(limits.allow(acc, Channel.PHONE, "+14155550100", recovery), "outro DDI segue livre")
+        assertFalse(limits.allow(acc, Channel.PHONE, "+14155550101", recovery), "teto diario de 3 SMS")
+        assertTrue(limits.allow(acc, Channel.EMAIL, FAKE_EMAIL, recovery), "e-mail tem teto proprio")
         now += 86_400_000
-        assertTrue(limits.allow(acc, Channel.PHONE, "+14155550101"), "teto reinicia no dia seguinte")
+        assertTrue(limits.allow(acc, Channel.PHONE, "+14155550101", recovery), "teto reinicia no dia seguinte")
     }
 
     @Test

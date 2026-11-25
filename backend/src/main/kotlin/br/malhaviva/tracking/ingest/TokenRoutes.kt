@@ -1,16 +1,15 @@
 package br.malhaviva.tracking.ingest
 
 import br.malhaviva.Problem
+import br.malhaviva.platform.clientIp
+import br.malhaviva.platform.readCapped
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.request.receiveChannel
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.RoutingCall
 import io.ktor.server.routing.post
-import io.ktor.utils.io.readRemaining
-import kotlinx.io.readByteArray
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -51,14 +50,13 @@ fun Route.tokenRoutes(
     clock: () -> Long = System::currentTimeMillis,
 ) {
     post("/telemetry/tokens") {
-        // le no maximo limite + 1 byte; nunca registra corpo, token de integridade ou chave
-        val body = call.receiveChannel().readRemaining(MAX_TOKEN_BODY_BYTES + 1L).readByteArray()
-        val ip = call.request.local.remoteAddress
-        if (!limiter.tryAcquire("ip:$ip", clock())) {
+        // limite por IP antes de ler o corpo; nunca registra corpo, token de integridade ou chave
+        if (!limiter.tryAcquire("ip:${call.clientIp()}", clock())) {
             call.response.header(HttpHeaders.RetryAfter, RETRY_AFTER_TOKEN_S)
             call.problem(HttpStatusCode.TooManyRequests, "Too many requests")
         } else {
-            val req = parseRequest(body)
+            // le no maximo limite + 1 byte
+            val req = parseRequest(call.readCapped(MAX_TOKEN_BODY_BYTES))
             when {
                 req == null -> call.problem(HttpStatusCode.BadRequest, "Malformed request")
                 !verifier.verify(req.platform, req.integrityToken) ->
