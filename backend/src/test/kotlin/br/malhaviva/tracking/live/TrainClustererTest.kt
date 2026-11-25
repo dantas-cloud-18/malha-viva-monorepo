@@ -152,4 +152,13 @@ class TrainClustererTest {
         assertEquals(1, trains.size)
         assertEquals(3030.0, trains.single().alongM)
     }
+
+    @Test
+    fun `viagem isolada a pe fora de estacao e ignorada, na estacao ou rapida nao`() {
+        val solo = TrainClusterer(minContributors = 1, newId = { "s" }, stations = { stations })
+        assertTrue(solo.cluster(train(2000.0, 1.5), now).isEmpty(), "pedestre")
+        assertEquals(1, solo.cluster(train(1050.0, 1.5), now).size, "na estacao")
+        assertEquals(1, solo.cluster(train(2000.0, 2.0), now).size, "no limite ja e trem")
+        assertEquals(1, solo.cluster(train(2000.0, 1.5, n = 2), now).size, "com 2 viagens nao e isolada")
+    }
 }

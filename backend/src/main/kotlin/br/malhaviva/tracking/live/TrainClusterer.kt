@@ -92,6 +92,9 @@ object ClusterPolicy {
     const val ETA_MAX_S = 99 * 60
     const val MIN_ETA_SPEED_MPS = 1.0
 
+    /** Pedestre: viagem isolada abaixo disto (7,2 km/h) fora de estacao nao e trem. Proposto, calibrar. */
+    const val PEDESTRIAN_MAX_SPEED_MPS = 2.0
+
     /**
      * Limiar de publicacao (RIPD R1/R2): ids efemeros distintos por trem. Decisao de produto: 1, para o trem
      * aparecer com um unico celular; sobe-se pela variavel de ambiente. Nunca abaixo do piso 1.
@@ -159,12 +162,23 @@ class TrainClusterer(
                 .filter { nowMs - it.tsMs <= ClusterPolicy.MAX_AGE_MS }
                 .map { projected(it, nowMs, direction) }
                 .sortedBy { it.alongM }
-        val drafts = groupByGap(fresh).filter { it.size >= minContributors }.map { draft(it) }
-        val ids = assignIds(drafts.map { it.alongM }, previous)
         val refs = stations()
+        val drafts =
+            groupByGap(fresh).filter { it.size >= minContributors && !isPedestrian(it, refs) }.map { draft(it) }
+        val ids = assignIds(drafts.map { it.alongM }, previous)
         return drafts.mapIndexed { i, d ->
             describe(d.copy(id = ids[i]), refs, direction, nowMs, previous.firstOrNull { it.id == ids[i] })
         }
+    }
+
+    /** Viagem isolada e lenta fora do raio de estacao: gente a pe, nao um trem. */
+    private fun isPedestrian(
+        group: List<PassengerPosition>,
+        refs: List<StationRef>,
+    ): Boolean {
+        val p = group.singleOrNull() ?: return false
+        val atStation = refs.any { abs(it.alongM - p.alongM) <= CrowdingPolicy.STATION_RADIUS_M }
+        return p.speedMps < ClusterPolicy.PEDESTRIAN_MAX_SPEED_MPS && !atStation
     }
 
     private fun projected(
