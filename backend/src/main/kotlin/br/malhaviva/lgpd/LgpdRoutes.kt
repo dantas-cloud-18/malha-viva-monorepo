@@ -77,6 +77,7 @@ fun Route.lgpdRoutes(
 ) {
     post("/auth/parental-consent/confirm") { confirmParental(call, c, l) }
     post("/auth/parental-consent/resend") { resendParental(call, c, l) }
+    get("/me") { call.sensitiveAccountIdOrUnauthorized(c)?.let { respondAccount(call, l, it) } }
     get("/me/consents") {
         call.sensitiveAccountIdOrUnauthorized(c)?.let { id ->
             call.respond(

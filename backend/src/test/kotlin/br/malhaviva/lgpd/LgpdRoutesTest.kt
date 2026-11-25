@@ -257,6 +257,17 @@ class LgpdRoutesTest : PostgresIntegrationTest() {
         }
 
     @Test
+    fun `get me exposes the age bracket and requires a token`() =
+        authApp(LgpdEnv(ds).components) {
+            assertEquals(HttpStatusCode.Unauthorized, send(HttpMethod.Get, "/me").status)
+            assertEquals(HttpStatusCode.Created, signup("@teen_003", TEEN_BIRTH).status)
+            val teen = httpGet("/me", login("@teen_003")).json()
+            assertEquals("@teen_003", teen.text("handle"))
+            assertEquals("teen_12_17", teen.text("age_bracket"))
+            assertEquals("adult", httpGet("/me", adultToken("@adulto_03")).json().text("age_bracket"))
+        }
+
+    @Test
     fun `patch corrects the handle and refuses taken or malformed ones`() =
         authApp(LgpdEnv(ds).components) {
             val token = adultToken("@corrige_1")

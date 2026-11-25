@@ -948,6 +948,22 @@ paths:
         "429": { $ref: "#/components/responses/TooManyRequests" }
 
   /me:
+    get:
+      tags: [privacy]
+      operationId: getMyAccount
+      summary: Conta atual (handle, faixa etária, status)
+      description: >
+        Fonte da faixa etária para o app. Menor de 18 anos (`under_12` ou `teen_12_17`) não compartilha localização;
+        o app trata faixa desconhecida como bloqueada. Aceita só token de acesso completo.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Conta da sessão.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "401": { $ref: "#/components/responses/Problem" }
     patch:
       tags: [privacy]
       operationId: correctMyData
