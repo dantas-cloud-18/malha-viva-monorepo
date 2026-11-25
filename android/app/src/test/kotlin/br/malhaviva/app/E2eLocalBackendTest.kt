@@ -1,4 +1,4 @@
-package br.malhaviva.app
+﻿package br.malhaviva.app
 
 import br.malhaviva.core.data.net.HttpRequest
 import br.malhaviva.core.data.net.HttpTransport
@@ -53,7 +53,7 @@ class E2eLocalBackendTest {
             val secrets = InMemorySecretStore()
             val session = AuthSession(api, secrets, { "dev-captcha" })
             val handle = "@e2e_" + System.nanoTime().toString(36)
-            val password = "Zq7-vLm2-xKpR9-wTeB4"
+            val password = "E2e-" + java.util.UUID.randomUUID() // gerada por rodada; nunca fixa no codigo
 
             // cadastro e login simples
             assertOk(session.signup(handle, password))
