@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Somente debug: a partir do Android 17 (API 37), alcancar o backend no host (10.0.2.2) exige acesso a rede local. -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <application android:networkSecurityConfig="@xml/network_security_config" />
 </manifest>
