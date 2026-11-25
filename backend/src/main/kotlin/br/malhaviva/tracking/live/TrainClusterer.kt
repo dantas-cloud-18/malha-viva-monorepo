@@ -7,6 +7,7 @@ import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
+import kotlin.math.min
 
 /** Ultima posicao de um passageiro anonimo; nao carrega nenhum identificador. */
 data class PassengerPosition(
@@ -83,7 +84,11 @@ object ClusterPolicy {
 
     // O app segura os ultimos 300 m da viagem (PrivacyPolicy.TRIM_M): a amostra mais nova tem de 25 a 40 s a 12 m/s.
     // A posicao e projetada para agora pela velocidade, dentro desta mesma janela.
-    const val MAX_AGE_MS = 60_000L
+    // Trem lento ou parado demora a sair dos 300 m retidos: 180 s evita sumir na parada (teste de campo 25/11).
+    const val MAX_AGE_MS = 180_000L
+
+    /** Projecao para "agora" limitada a esta idade, para amostra velha nao empurrar o trem para longe. */
+    const val MAX_PROJECT_MS = 60_000L
     const val MIN_BAND_M = 100.0
     const val MAD_FACTOR = 3.0
 
@@ -164,21 +169,28 @@ class TrainClusterer(
                 .sortedBy { it.alongM }
         val refs = stations()
         val drafts =
-            groupByGap(fresh).filter { it.size >= minContributors && !isPedestrian(it, refs) }.map { draft(it) }
+            groupByGap(fresh)
+                .filter { it.size >= minContributors && !isPedestrian(it, refs, previous) }
+                .map { draft(it) }
         val ids = assignIds(drafts.map { it.alongM }, previous)
         return drafts.mapIndexed { i, d ->
             describe(d.copy(id = ids[i]), refs, direction, nowMs, previous.firstOrNull { it.id == ids[i] })
         }
     }
 
-    /** Viagem isolada e lenta fora do raio de estacao: gente a pe, nao um trem. */
+    /**
+     * Viagem isolada e lenta fora do raio de estacao: gente a pe, nao um trem. Excecao: perto de um trem ja
+     * publicado e o trem que parou entre estacoes (teste de campo 25/11), nao um pedestre.
+     */
     private fun isPedestrian(
         group: List<PassengerPosition>,
         refs: List<StationRef>,
+        previous: List<TrainState>,
     ): Boolean {
         val p = group.singleOrNull() ?: return false
         val atStation = refs.any { abs(it.alongM - p.alongM) <= CrowdingPolicy.STATION_RADIUS_M }
-        return p.speedMps < ClusterPolicy.PEDESTRIAN_MAX_SPEED_MPS && !atStation
+        val knownTrain = previous.any { abs(it.alongM - p.alongM) <= ClusterPolicy.MATCH_RADIUS_M }
+        return p.speedMps < ClusterPolicy.PEDESTRIAN_MAX_SPEED_MPS && !atStation && !knownTrain
     }
 
     private fun projected(
@@ -186,7 +198,7 @@ class TrainClusterer(
         nowMs: Long,
         direction: Direction,
     ): PassengerPosition {
-        val ahead = p.speedMps * (nowMs - p.tsMs) / MS_PER_S
+        val ahead = p.speedMps * min(nowMs - p.tsMs, ClusterPolicy.MAX_PROJECT_MS) / MS_PER_S
         return p.copy(alongM = (p.alongM + direction.sign() * ahead).coerceAtLeast(0.0))
     }
 

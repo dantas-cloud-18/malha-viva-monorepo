@@ -95,9 +95,9 @@ class LiveLimitsTest {
     fun `snapshot is served from a one second cache and refreshed by updates`() {
         val hub = LiveHub(clock = { clock })
         val t0 = clock
-        // 59,8 s de idade: vale agora, mas passa dos 60 s em 500 ms
+        // MAX_AGE - 200 ms de idade: vale agora, mas passa do limite em 500 ms
         listOf(1000.0, 1050.0, 1100.0).forEachIndexed { i, along ->
-            hub.update(key, "e$i", PassengerPosition(along, 12.0, t0 - 59_800))
+            hub.update(key, "e$i", PassengerPosition(along, 12.0, t0 - ClusterPolicy.MAX_AGE_MS + 200))
         }
         assertEquals(1, hub.snapshot(key).size)
         clock = t0 + 500
