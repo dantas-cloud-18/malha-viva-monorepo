@@ -158,7 +158,10 @@ class TotpEnrollment(
  * Forca bruta: cada erro (login, confirmacao ou desligamento) conta no contador PERSISTENTE da conta; com
  * [TOTP_MAX_FAILURES] erros a conta trava por [TOTP_LOCK_MS], qualquer que seja o IP ou o `mfa_token`. Travada,
  * nem o codigo certo e aceito. Acerto zera o contador.
+ *
+ * Suppress: um unico servico concentra o segredo e a trava por conta, que os fatores alternativos reaproveitam.
  */
+@Suppress("TooManyFunctions")
 class TotpService(
     private val repo: TotpRepository,
     otpKey: ByteArray,
@@ -212,7 +215,15 @@ class TotpService(
         accept: (Long) -> Boolean,
     ): Boolean {
         val step = Totp.verify(decrypt(accountId, rec.secretEnc), code, clock(), rec.lastStep)
-        val ok = step != null && accept(step)
+        return settle(accountId, rec, step != null && accept(step))
+    }
+
+    /** Efeito de um resultado na contagem por conta: erro soma (e pode travar), acerto zera. */
+    private fun settle(
+        accountId: UUID,
+        rec: TotpRecord,
+        ok: Boolean,
+    ): Boolean {
         if (!ok) {
             repo.recordFailure(accountId, clock(), TOTP_MAX_FAILURES, TOTP_LOCK_MS)
         } else if (rec.failedAttempts > 0 || rec.lockedUntilMs > 0) {
@@ -255,6 +266,18 @@ class TotpService(
     ): Boolean {
         val rec = repo.find(accountId)?.takeIf { it.enabled && lockedSeconds(it, clock()) == 0L }
         return rec != null && counted(accountId, rec, code) { repo.advance(accountId, rec.lastStep, it) }
+    }
+
+    /**
+     * Outro fator da mesma conta (codigo de recuperacao) na MESMA contagem e trava do TOTP: so roda [check] com o
+     * 2FA ativo e a conta livre; erro soma na trava, acerto zera.
+     */
+    fun verifyAlternative(
+        accountId: UUID,
+        check: () -> Boolean,
+    ): Boolean {
+        val rec = repo.find(accountId)?.takeIf { it.enabled && lockedSeconds(it, clock()) == 0L }
+        return rec != null && settle(accountId, rec, check())
     }
 
     /** Desliga com um codigo valido e ainda nao usado. */

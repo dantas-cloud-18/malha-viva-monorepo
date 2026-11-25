@@ -1,6 +1,9 @@
 package br.malhaviva.auth
 
+import br.malhaviva.auth.recovery.BackupCodeService
+import br.malhaviva.auth.recovery.InMemoryBackupCodeRepository
 import br.malhaviva.auth.recovery.InMemoryTotpRepository
+import br.malhaviva.auth.recovery.RecordingSecurityNotifier
 import br.malhaviva.auth.recovery.TEST_OTP_KEY
 import br.malhaviva.auth.recovery.TotpService
 import java.time.Instant
@@ -181,7 +184,10 @@ class TestAuth(
     val guard = LoginGuard { now }
     val totpRepo = InMemoryTotpRepository()
     val totp = TotpService(totpRepo, TEST_OTP_KEY, { now })
-    val mfa = MfaService(accounts, totp, hasher, access, { now })
+    val backupRepo = InMemoryBackupCodeRepository()
+    val backup = BackupCodeService(backupRepo, TEST_OTP_KEY, { now })
+    val notices = RecordingSecurityNotifier()
+    val mfa = MfaService(accounts, totp, backup, notices, hasher, access, { now })
     val components =
         AuthComponents(
             AuthService(accounts, sessions, PasswordPolicy(FakePwned()), hasher, guard, captcha, mfa),

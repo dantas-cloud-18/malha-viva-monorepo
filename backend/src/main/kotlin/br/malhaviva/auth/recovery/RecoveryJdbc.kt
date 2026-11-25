@@ -20,7 +20,7 @@ private const val CHANGE_COLUMNS =
     "change_id, account_id, channel, new_value, created_at, effective_at, confirmed_at, cancelled_at, applied_at"
 private const val OPEN_CHANGE = "cancelled_at IS NULL AND applied_at IS NULL"
 
-/** Contatos nas colunas de `accounts` (V3). Nao testado contra Postgres real nesta fase (sem Docker). */
+/** Contatos nas colunas de `accounts` (V3), testado contra Postgres real (JdbcRecoveryIntegrationTest). */
 class JdbcContactRepository(
     private val dataSource: DataSource,
 ) : ContactRepository {

@@ -79,11 +79,16 @@ object RecoveryConfig {
         return { task -> scope.launch { task() } }
     }
 
+    /** Canal de saida compartilhado pela recuperacao e pelos avisos de seguranca do 2FA. */
+    fun gatewayFromEnv(env: (String) -> String?) = MessageGateway(senderFromEnv(env), limitsFromEnv(env))
+
     // injecao de dependencias de producao; agrupar so deslocaria os parametros
     @Suppress("LongParameterList")
     fun build(
         dataSource: DataSource,
         env: (String) -> String?,
+        contacts: ContactRepository,
+        gateway: MessageGateway,
         accounts: AccountRepository,
         sessions: SessionService,
         policy: PasswordPolicy,
@@ -91,8 +96,6 @@ object RecoveryConfig {
         captcha: CaptchaVerifier,
     ): RecoveryComponents {
         val otp = OtpService(JdbcOtpRepository(dataSource), otpKeyFromEnv(env))
-        val gateway = MessageGateway(senderFromEnv(env), limitsFromEnv(env))
-        val contacts = JdbcContactRepository(dataSource)
         val changes = JdbcContactChangeRepository(dataSource)
         val contactService = ContactService(accounts, contacts, changes, otp, gateway, hasher)
         val service =

@@ -1,5 +1,8 @@
 package br.malhaviva.auth
 
+import br.malhaviva.auth.recovery.BackupCodeService
+import br.malhaviva.auth.recovery.SecurityEvent
+import br.malhaviva.auth.recovery.SecurityNotifier
 import br.malhaviva.auth.recovery.TotpEnrollment
 import br.malhaviva.auth.recovery.TotpService
 import br.malhaviva.platform.ExpiringMap
@@ -49,6 +52,18 @@ sealed interface MfaRedeem {
 
 enum class TotpDisableResult { DONE, DENIED, ADMIN_MANDATORY }
 
+/** Segundo fator aceito no login: o codigo TOTP ou um codigo de recuperacao (uso unico). */
+enum class MfaFactor { TOTP, BACKUP }
+
+sealed interface BackupRegenerateResult {
+    /** Codigos em claro: so existem nesta resposta. */
+    class Done(
+        val codes: List<String>,
+    ) : BackupRegenerateResult
+
+    data object Denied : BackupRegenerateResult
+}
+
 sealed interface TotpEnrollResult {
     class Started(
         val enrollment: TotpEnrollment,
@@ -75,6 +90,8 @@ sealed interface TotpEnrollResult {
 class MfaService(
     private val accounts: AccountRepository,
     private val totp: TotpService,
+    private val backup: BackupCodeService,
+    private val notifier: SecurityNotifier,
     private val hasher: PasswordHasher,
     private val access: AccessTokenService,
     private val clock: () -> Long = System::currentTimeMillis,
@@ -122,12 +139,13 @@ class MfaService(
     fun redeem(
         token: String,
         code: String,
+        factor: MfaFactor = MfaFactor.TOTP,
     ): MfaRedeem {
         val hash = sha256Hex(token)
         val ch = challenges[hash]?.takeIf { it.expiresAtMs > clock() }
         return when {
             ch == null -> MfaRedeem.Unknown.also { challenges.remove(hash) }
-            totp.verify(ch.accountId, code) ->
+            verifyFactor(ch.accountId, code, factor) ->
                 // remove condicional: dois pedidos simultaneos nao viram duas sessoes
                 if (challenges.remove(hash, ch)) MfaRedeem.Ok(ch) else MfaRedeem.Unknown
             else -> {
@@ -166,10 +184,46 @@ class MfaService(
         code: String?,
     ): Boolean = code != null && accounts.consumeAdminEnrollCode(accountId, sha256Hex(code))
 
+    /** Codigo certo liga o 2FA e devolve os codigos de recuperacao (so desta vez); null se errado. */
     fun confirm(
         accountId: UUID,
         code: String,
-    ): Boolean = totp.confirm(accountId, code)
+    ): List<String>? = if (totp.confirm(accountId, code)) backup.regenerate(accountId) else null
+
+    /**
+     * Codigo de recuperacao entra na mesma trava por conta do TOTP e, ao ser usado, avisa os canais verificados.
+     * Os dois fatores consomem o proprio codigo (passo do TOTP ou codigo de recuperacao).
+     */
+    private fun verifyFactor(
+        accountId: UUID,
+        code: String,
+        factor: MfaFactor,
+    ): Boolean =
+        when (factor) {
+            MfaFactor.TOTP -> totp.verify(accountId, code)
+            MfaFactor.BACKUP ->
+                totp.verifyAlternative(accountId) { backup.consume(accountId, code) }.also {
+                    if (it) notifier.notify(accountId, SecurityEvent.BACKUP_CODE_USED)
+                }
+        }
+
+    /** Exige senha atual e um segundo fator (TOTP ou codigo de recuperacao); invalida todos os codigos antigos. */
+    fun regenerateBackupCodes(
+        accountId: UUID,
+        password: String,
+        code: String,
+        factor: MfaFactor,
+    ): BackupRegenerateResult {
+        val account = accounts.findById(accountId)
+        val passwordOk = account != null && hasher.verify(normalizePassword(password), account.passwordHash)
+        return if (passwordOk && verifyFactor(accountId, code, factor)) {
+            val codes = backup.regenerate(accountId)
+            notifier.notify(accountId, SecurityEvent.BACKUP_CODES_REGENERATED)
+            BackupRegenerateResult.Done(codes)
+        } else {
+            BackupRegenerateResult.Denied
+        }
+    }
 
     /** Exige senha atual e codigo atual. Admin nao desliga: o 2FA e obrigatorio. */
     fun disable(
@@ -181,7 +235,10 @@ class MfaService(
         val passwordOk = account != null && hasher.verify(normalizePassword(password), account.passwordHash)
         return when {
             account?.role == ROLE_ADMIN -> TotpDisableResult.ADMIN_MANDATORY
-            passwordOk && totp.disable(accountId, code) -> TotpDisableResult.DONE
+            passwordOk && totp.disable(accountId, code) -> {
+                backup.deleteAll(accountId)
+                TotpDisableResult.DONE
+            }
             else -> TotpDisableResult.DENIED
         }
     }

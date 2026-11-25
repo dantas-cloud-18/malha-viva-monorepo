@@ -141,21 +141,28 @@ paths:
     post:
       tags: [auth]
       operationId: loginMfa
-      summary: Concluir o login com o código TOTP
+      summary: Concluir o login com o código TOTP ou um código de recuperação
       security: []
       description: >
         `mfa_token` vale 5 min, é de uso único e fica só como SHA-256 em memória. Até 5 códigos errados por token;
         cada erro conta no atraso progressivo do login (handle e IP). O mesmo passo de 30 s nunca é aceito duas vezes.
+        Envie exatamente um entre `code` (TOTP) e `backup_code` (código de recuperação de uso único, entregue ao
+        ligar o TOTP); os dois juntos, ou nenhum, dão 400. Código de recuperação errado conta na mesma trava de TOTP
+        por conta (10 erros, 15 min) e, ao ser usado, os canais verificados são avisados. Vale também para `admin`.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [mfa_token, code]
+              required: [mfa_token]
+              oneOf:
+                - required: [code]
+                - required: [backup_code]
               properties:
                 mfa_token: { type: string }
                 code: { type: string, pattern: "^[0-9]{6}$" }
+                backup_code: { $ref: "#/components/schemas/BackupCode" }
       responses:
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "200":
@@ -163,6 +170,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/TokenPair" }
           description: Tokens emitidos; o access token traz `amr` com `otp`.
+        "400": { $ref: "#/components/responses/Problem" }
         "401":
           description: Código errado ou reusado, ou `mfa_token` vencido, usado ou desconhecido (`invalid_mfa`).
           content:
@@ -212,7 +220,9 @@ paths:
       tags: [auth]
       operationId: confirmTotpEnrollment
       summary: Confirmar o TOTP com um código válido
-      description: Liga o 2FA. Aceita o token restrito `mfa_enroll_only`; depois é preciso entrar de novo.
+      description: >
+        Liga o 2FA. Aceita o token restrito `mfa_enroll_only`; depois é preciso entrar de novo. A resposta traz os 10
+        códigos de recuperação, **só desta vez** (no servidor fica apenas o HMAC de cada um).
       security:
         - bearerAuth: []
       requestBody:
@@ -226,9 +236,55 @@ paths:
                 code: { type: string, pattern: "^[0-9]{6}$" }
       responses:
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
-        "204": { description: 2FA ativo. }
+        "200":
+          description: 2FA ativo; códigos de recuperação em claro, mostrados uma única vez.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BackupCodes" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /me/mfa/totp/backup-codes:
+    post:
+      tags: [auth]
+      operationId: regenerateBackupCodes
+      summary: Regenerar os códigos de recuperação do TOTP
+      description: >
+        Exige a senha atual **e** um segundo fator: `code` (TOTP atual) ou `backup_code` (um código de recuperação
+        ainda válido, que é consumido); exatamente um dos dois, senão 400. Apaga o lote antigo (os códigos antigos
+        deixam de valer) e devolve 10 novos, só desta vez. Erro conta na trava de TOTP por conta. Avisa os canais
+        verificados. Não aceita o token restrito `mfa_enroll_only`. `admin` segue as mesmas regras.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              oneOf:
+                - required: [code]
+                - required: [backup_code]
+              properties:
+                password: { type: string }
+                code: { type: string, pattern: "^[0-9]{6}$" }
+                backup_code: { $ref: "#/components/schemas/BackupCode" }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "200":
+          description: Novo lote de códigos de recuperação.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BackupCodes" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403":
+          description: Senha ou segundo fator errado (`invalid_credentials`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
 
   /me/mfa/totp/disable:
@@ -856,6 +912,24 @@ components:
       properties:
         secret: { type: string, description: Base32. Devolvido só nesta resposta. }
         otpauth_uri: { type: string }
+
+    BackupCode:
+      type: string
+      minLength: 10
+      maxLength: 16
+      description: >
+        Código de recuperação: 10 caracteres de `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (sem I, O, 0, 1). Maiúsculas ou
+        minúsculas, espaços e hifens na digitação são ignorados.
+    BackupCodes:
+      type: object
+      required: [backup_codes]
+      properties:
+        backup_codes:
+          type: array
+          minItems: 10
+          maxItems: 10
+          items: { type: string, pattern: "^[A-HJ-NP-Z2-9]{10}$" }
+          description: Códigos de uso único, em claro só nesta resposta.
 
     TelemetryToken:
       type: object

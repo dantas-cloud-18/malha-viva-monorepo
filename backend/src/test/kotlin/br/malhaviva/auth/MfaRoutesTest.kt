@@ -130,7 +130,14 @@ class MfaRoutesTest {
         assertTrue(body.str("otpauth_uri").startsWith("otpauth://totp/"))
         val secret = base32Decode(body.str("secret"))
         val confirmed = post("/me/mfa/totp/confirm", """{"code":"${code(secret, t.now)}"}""", access)
-        assertEquals(HttpStatusCode.NoContent, confirmed.status)
+        assertEquals(HttpStatusCode.OK, confirmed.status)
+        assertEquals(
+            10,
+            confirmed
+                .obj()
+                .getValue("backup_codes")
+                .jsonArray.size,
+        )
         return secret
     }
 
@@ -161,7 +168,7 @@ class MfaRoutesTest {
             val wrong = post("/me/mfa/totp/confirm", """{"code":"000000"}""", access)
             assertEquals(HttpStatusCode.BadRequest, wrong.status)
             assertEquals(
-                HttpStatusCode.NoContent,
+                HttpStatusCode.OK,
                 post("/me/mfa/totp/confirm", """{"code":"${code(secret, t.now)}"}""", access).status,
             )
             assertEquals(HttpStatusCode.Conflict, post("/me/mfa/totp", "{}", access).status)
@@ -304,7 +311,7 @@ class MfaRoutesTest {
             r.contacts.setVerified(id, Channel.PHONE, FAKE_PHONE, Instant.EPOCH)
             val started = assertIs<TotpEnrollResult.Started>(t.mfa.enroll(id, ADMIN_ENROLL_CODE))
             val secret = base32Decode(started.enrollment.secretBase32)
-            assertTrue(t.mfa.confirm(id, code(secret, t.now)))
+            assertNotNull(t.mfa.confirm(id, code(secret, t.now)))
 
             r.service.request("10.0.0.9", "@admin_rec", null)
             val otp = r.fake.lastCode(Channel.PHONE)

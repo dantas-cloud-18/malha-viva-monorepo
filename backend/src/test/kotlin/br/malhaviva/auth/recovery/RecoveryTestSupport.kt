@@ -278,6 +278,58 @@ class InMemoryTotpRepository : TotpRepository {
     }
 }
 
+class InMemoryBackupCodeRepository : BackupCodeRepository {
+    private class Row(
+        val hash: String,
+        var used: Boolean = false,
+    )
+
+    private val rows = HashMap<UUID, List<Row>>()
+
+    @Synchronized
+    override fun replaceAll(
+        accountId: UUID,
+        hashes: List<String>,
+        now: Instant,
+    ) {
+        rows[accountId] = hashes.map { Row(it) }
+    }
+
+    @Synchronized
+    override fun unusedHashes(accountId: UUID) = rows[accountId].orEmpty().filter { !it.used }.map { it.hash }
+
+    @Synchronized
+    override fun consume(
+        accountId: UUID,
+        hash: String,
+        now: Instant,
+    ): Boolean {
+        val row = rows[accountId].orEmpty().firstOrNull { it.hash == hash && !it.used }
+        row?.used = true
+        return row != null
+    }
+
+    @Synchronized
+    override fun deleteAll(accountId: UUID) {
+        rows.remove(accountId)
+    }
+
+    /** Hashes guardados (todos, usados ou nao): so para os testes olharem o que fica em repouso. */
+    @Synchronized
+    fun storedHashes(accountId: UUID) = rows[accountId].orEmpty().map { it.hash }
+}
+
+class RecordingSecurityNotifier : SecurityNotifier {
+    val events = CopyOnWriteArrayList<Pair<UUID, SecurityEvent>>()
+
+    override fun notify(
+        accountId: UUID,
+        event: SecurityEvent,
+    ) {
+        events += accountId to event
+    }
+}
+
 /** Limites generosos: cada teste que quer limite apertado passa o seu. */
 fun roomyLimits(clock: () -> Long) =
     SendLimits(

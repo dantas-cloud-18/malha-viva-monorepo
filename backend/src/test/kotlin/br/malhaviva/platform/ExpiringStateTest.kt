@@ -88,7 +88,9 @@ class ExpiringStateTest {
     fun `pending mfa challenges expire after five minutes`() {
         val t = TestAuth()
         val mfa =
-            MfaService(t.accounts, t.totp, t.hasher, AccessTokenService(TEST_JWT_SECRET), { now }, ticker = ticker)
+            MfaService(t.accounts, t.totp, t.backup, t.notices, t.hasher, AccessTokenService(TEST_JWT_SECRET), {
+                now
+            }, ticker = ticker)
         repeat(50) { mfa.open(UUID.randomUUID(), "@h$it", null) }
         assertEquals(50L, mfa.pendingChallenges())
         ticker.advance(Duration.ofMinutes(6))

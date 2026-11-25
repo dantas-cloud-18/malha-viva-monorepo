@@ -10,6 +10,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private const val BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
@@ -43,7 +45,7 @@ class TotpLockoutTest {
             val id = accounts.findByHandle(handle)!!.id
             val started = assertIs<TotpEnrollResult.Started>(mfa.enroll(id, null))
             val secret = base32Decode(started.enrollment.secretBase32)
-            assertTrue(mfa.confirm(id, code(secret)))
+            assertNotNull(mfa.confirm(id, code(secret)))
             now += 2 * STEP_MS
             Enabled(id, secret)
         }
@@ -102,10 +104,10 @@ class TotpLockoutTest {
         val id = t.accounts.findByHandle("@confirma_1")!!.id
         val started = assertIs<TotpEnrollResult.Started>(t.mfa.enroll(id, null))
         val secret = base32Decode(started.enrollment.secretBase32)
-        repeat(TOTP_MAX_FAILURES) { assertFalse(t.mfa.confirm(id, WRONG)) }
-        assertFalse(t.mfa.confirm(id, t.code(secret)), "travado: o codigo certo e recusado")
+        repeat(TOTP_MAX_FAILURES) { assertNull(t.mfa.confirm(id, WRONG)) }
+        assertNull(t.mfa.confirm(id, t.code(secret)), "travado: o codigo certo e recusado")
         t.now += TOTP_LOCK_MS + 1_000
-        assertTrue(t.mfa.confirm(id, t.code(secret)))
+        assertNotNull(t.mfa.confirm(id, t.code(secret)))
 
         t.now += STEP_MS
         repeat(TOTP_MAX_FAILURES) { assertEquals(TotpDisableResult.DENIED, t.mfa.disable(id, STRONG_PASSWORD, WRONG)) }

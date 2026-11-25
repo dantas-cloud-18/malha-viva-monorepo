@@ -161,6 +161,7 @@ class AuthService(
         ip: String,
         mfaToken: String,
         code: String,
+        factor: MfaFactor = MfaFactor.TOTP,
     ): LoginResult {
         val challenge = mfa.peek(mfaToken) ?: return LoginResult.InvalidMfa
         val key = challenge.handleKey
@@ -171,7 +172,7 @@ class AuthService(
         } else if (locked > 0) {
             LoginResult.Throttled(locked)
         } else {
-            when (val r = mfa.redeem(mfaToken, code)) {
+            when (val r = mfa.redeem(mfaToken, code, factor)) {
                 is MfaRedeem.Ok -> {
                     guard.recordSuccess(ip, key)
                     LoginResult.Success(sessions.startSession(r.challenge.accountId, r.challenge.deviceLabel, true))

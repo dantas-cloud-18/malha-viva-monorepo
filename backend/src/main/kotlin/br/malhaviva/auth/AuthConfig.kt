@@ -1,5 +1,9 @@
 package br.malhaviva.auth
 
+import br.malhaviva.auth.recovery.BackupCodeService
+import br.malhaviva.auth.recovery.ContactSecurityNotifier
+import br.malhaviva.auth.recovery.JdbcBackupCodeRepository
+import br.malhaviva.auth.recovery.JdbcContactRepository
 import br.malhaviva.auth.recovery.JdbcTotpRepository
 import br.malhaviva.auth.recovery.RecoveryConfig
 import br.malhaviva.auth.recovery.TotpService
@@ -42,10 +46,26 @@ object AuthConfig {
         val sessions = SessionService(JdbcSessionRepository(dataSource), access)
         val accounts = JdbcAccountRepository(dataSource)
         val policy = PasswordPolicy(HttpPwnedPasswordsChecker())
-        val totp = TotpService(JdbcTotpRepository(dataSource), otpKeyFromEnv(env))
-        val mfa = MfaService(accounts, totp, hasher, access)
+        val otpKey = otpKeyFromEnv(env)
+        val totp = TotpService(JdbcTotpRepository(dataSource), otpKey)
+        val backup = BackupCodeService(JdbcBackupCodeRepository(dataSource), otpKey)
+        val contacts = JdbcContactRepository(dataSource)
+        val gateway = RecoveryConfig.gatewayFromEnv(env)
+        val notifier = ContactSecurityNotifier(contacts, gateway, RecoveryConfig.backgroundLauncher())
+        val mfa = MfaService(accounts, totp, backup, notifier, hasher, access)
         val auth = AuthService(accounts, sessions, policy, hasher, LoginGuard(), verifier, mfa)
-        val recovery = RecoveryConfig.build(dataSource, env, accounts, sessions, policy, hasher, verifier)
+        val recovery =
+            RecoveryConfig.build(
+                dataSource,
+                env,
+                contacts,
+                gateway,
+                accounts,
+                sessions,
+                policy,
+                hasher,
+                verifier,
+            )
         return AuthComponents(auth, sessions, access, recovery = recovery)
     }
 }

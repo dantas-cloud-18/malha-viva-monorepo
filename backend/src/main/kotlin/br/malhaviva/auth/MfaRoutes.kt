@@ -34,7 +34,9 @@ internal class MfaEnrollmentDto(
 @Serializable
 private class LoginMfaDto(
     @SerialName("mfa_token") val mfaToken: String,
-    val code: String,
+    // exatamente um dos dois: o TOTP ou um codigo de recuperacao
+    val code: String? = null,
+    @SerialName("backup_code") val backupCode: String? = null,
 )
 
 @Serializable
@@ -61,6 +63,18 @@ private class TotpEnrollmentDto(
 )
 
 @Serializable
+private class RegenerateBackupDto(
+    val password: String,
+    val code: String? = null,
+    @SerialName("backup_code") val backupCode: String? = null,
+)
+
+@Serializable
+private class BackupCodesDto(
+    @SerialName("backup_codes") val backupCodes: List<String>,
+)
+
+@Serializable
 private class StatusDto(
     val status: String = "ok",
 )
@@ -72,10 +86,11 @@ fun Route.mfaRoutes(c: AuthComponents) {
             call.throttled()
         } else {
             call.withBody<LoginMfaDto> { dto ->
-                if (dto == null || dto.mfaToken.length > MAX_TOKEN_INPUT || dto.code.length > MAX_CODE_INPUT) {
+                val factor = dto?.let { factorOf(it.code, it.backupCode) }
+                if (dto == null || factor == null || dto.mfaToken.length > MAX_TOKEN_INPUT) {
                     call.problem(HttpStatusCode.BadRequest, "Malformed request")
                 } else {
-                    respondLogin(call, c.auth.loginMfa(call.clientIp(), dto.mfaToken, dto.code))
+                    respondLogin(call, c.auth.loginMfa(call.clientIp(), dto.mfaToken, factor.second, factor.first))
                 }
             }
         }
@@ -83,8 +98,20 @@ fun Route.mfaRoutes(c: AuthComponents) {
     post("/me/mfa/totp") { enrollRoute(call, c) }
     post("/me/mfa/totp/confirm") { confirmRoute(call, c) }
     post("/me/mfa/totp/disable") { disableRoute(call, c) }
+    post("/me/mfa/totp/backup-codes") { regenerateRoute(call, c) }
     get("/admin/ping") { call.adminIdOrForbidden(c)?.let { call.respond(StatusDto()) } }
 }
+
+/** O fator e o valor, se veio exatamente um dos dois e dentro do limite de tamanho; senao null. */
+private fun factorOf(
+    code: String?,
+    backupCode: String?,
+): Pair<MfaFactor, String>? =
+    when {
+        code != null && backupCode == null -> MfaFactor.TOTP to code
+        code == null && backupCode != null -> MfaFactor.BACKUP to backupCode
+        else -> null
+    }?.takeIf { it.second.length <= MAX_CODE_INPUT }
 
 /** Resultados comuns ao login por senha e ao segundo passo. */
 internal suspend fun respondLogin(
@@ -151,8 +178,12 @@ private suspend fun confirmRoute(
             when {
                 dto == null || dto.code.length > MAX_CODE_INPUT ->
                     call.problem(HttpStatusCode.BadRequest, "Malformed request")
-                c.auth.mfa.confirm(p.accountId, dto.code) -> call.respond(HttpStatusCode.NoContent)
-                else -> call.problem(HttpStatusCode.BadRequest, "Invalid or expired code", "invalid_or_expired_code")
+                else ->
+                    // os codigos de recuperacao saem so nesta resposta
+                    c.auth.mfa
+                        .confirm(p.accountId, dto.code)
+                        ?.let { call.respond(BackupCodesDto(it)) }
+                        ?: call.problem(HttpStatusCode.BadRequest, "Invalid or expired code", "invalid_or_expired_code")
             }
         }
     }
@@ -174,6 +205,27 @@ private suspend fun disableRoute(
                         call.problem(HttpStatusCode.Forbidden, "Invalid credentials", "invalid_credentials")
                     TotpDisableResult.ADMIN_MANDATORY ->
                         call.problem(HttpStatusCode.Forbidden, "TOTP is mandatory for admin", "admin_mfa_mandatory")
+                }
+            }
+        }
+    }
+}
+
+private suspend fun regenerateRoute(
+    call: RoutingCall,
+    c: AuthComponents,
+) {
+    val id = call.sensitiveAccountIdOrUnauthorized(c) ?: return
+    if (!limited(call, c, id)) {
+        call.withBody<RegenerateBackupDto> { dto ->
+            val factor = dto?.let { factorOf(it.code, it.backupCode) }
+            if (dto == null || factor == null || dto.password.length > MAX_PASSWORD_INPUT) {
+                call.problem(HttpStatusCode.BadRequest, "Malformed request")
+            } else {
+                when (val r = c.auth.mfa.regenerateBackupCodes(id, dto.password, factor.second, factor.first)) {
+                    is BackupRegenerateResult.Done -> call.respond(BackupCodesDto(r.codes))
+                    BackupRegenerateResult.Denied ->
+                        call.problem(HttpStatusCode.Forbidden, "Invalid credentials", "invalid_credentials")
                 }
             }
         }
