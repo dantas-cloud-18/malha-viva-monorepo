@@ -214,4 +214,29 @@ class LiveTrainsClientTest {
             assertTrue(ok.stations[0].alongM < ok.stations[1].alongM)
             assertNull(client(Script(emptyList()), FakeTransport(snapshot = null, network = null)).network())
         }
+
+    @Test
+    fun `check-in posts an anonymous body and cancel deletes by id`() =
+        runTest {
+            val sent = mutableListOf<HttpRequest>()
+            val transport =
+                object : HttpTransport {
+                    override suspend fun execute(request: HttpRequest): HttpResponse {
+                        sent += request
+                        return HttpResponse(HttpURLConnection.HTTP_NO_CONTENT, "")
+                    }
+                }
+            val c = client(Script(emptyList()), transport)
+            assertTrue(c.checkIn(Direction.CentralToSantaCruz, "bangu", "uuid-1"))
+            assertTrue(c.cancelCheckIn(Direction.CentralToSantaCruz, "bangu", "uuid-1"))
+            assertEquals("POST", sent[0].method)
+            assertEquals("https://api.test/v1/corridors/RAMAL_SANTA_CRUZ/stations/bangu/checkins", sent[0].url)
+            assertEquals(
+                """{"direction":"CENTRAL_TO_SANTA_CRUZ","checkin_id":"uuid-1"}""",
+                sent[0].body!!.decodeToString(),
+            )
+            assertEquals(setOf("Content-Type"), sent[0].headers.keys)
+            assertEquals("DELETE", sent[1].method)
+            assertTrue(sent[1].url.endsWith("/checkins/uuid-1?direction=CENTRAL_TO_SANTA_CRUZ"))
+        }
 }

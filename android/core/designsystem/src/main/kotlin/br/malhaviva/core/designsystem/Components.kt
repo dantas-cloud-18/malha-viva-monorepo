@@ -3,6 +3,7 @@ package br.malhaviva.core.designsystem
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -129,6 +130,8 @@ data class TimelineStop(
     val time: String,
     val state: StopState,
     val detail: String? = null,
+    /** Toque na linha (ex.: escolher a estacao); nulo = linha nao clicavel. */
+    val onClick: (() -> Unit)? = null,
 )
 
 @Composable
@@ -162,6 +165,7 @@ private fun TimelineRow(
             Modifier
                 .fillMaxWidth()
                 .height(48.dp)
+                .then(if (stop.onClick != null) Modifier.clickable(onClick = stop.onClick) else Modifier)
                 .clearAndSetSemantics {
                     contentDescription =
                         listOfNotNull(stop.name, stop.time, stateText, stop.detail).joinToString(", ")

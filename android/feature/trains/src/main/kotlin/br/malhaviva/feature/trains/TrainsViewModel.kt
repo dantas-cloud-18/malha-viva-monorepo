@@ -9,11 +9,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 /**
  * Liga o [TrainsSource] ao estado. Tudo (conexao, polling, tick) so roda entre [setActive] true e false:
  * a tela chama conforme o ciclo de vida, entao nada consome rede ou bateria fora de vista.
+ * Tambem guarda o check-in de estacao (depende de source + estado; extrair se a classe crescer mais).
  */
+@Suppress("TooManyFunctions")
 class TrainsViewModel(
     private val source: TrainsSource,
     private val clock: () -> Long = { System.nanoTime() / NANOS_PER_MS },
@@ -28,8 +31,28 @@ class TrainsViewModel(
 
     fun selectDirection(direction: Direction) {
         if (direction == state.value.direction) return
+        cancelCheckIn()
         onIntent(TrainsIntent.DirectionSelected(direction))
         if (session?.isActive == true) start()
+    }
+
+    /** Marca presenca na estacao por 10 min; troca o check-in anterior, se houver. So vale se o servidor aceitar. */
+    fun checkIn(stationId: String) {
+        cancelCheckIn()
+        val direction = state.value.direction
+        val id = UUID.randomUUID().toString()
+        viewModelScope.launch {
+            if (source.checkIn(direction, stationId, id)) {
+                val expiresAt = clock() + TrainsPolicy.CHECKIN_TTL_MS
+                onIntent(TrainsIntent.CheckInChanged(StationCheckIn(stationId, direction, id, expiresAt)))
+            }
+        }
+    }
+
+    fun cancelCheckIn() {
+        val current = state.value.checkIn ?: return
+        onIntent(TrainsIntent.CheckInChanged(null))
+        viewModelScope.launch { source.cancelCheckIn(current.direction, current.stationId, current.id) }
     }
 
     /** Tenta de novo agora (botao da tela de erro): zera o backoff da malha e reabre o stream. */

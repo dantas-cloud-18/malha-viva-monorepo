@@ -50,5 +50,10 @@
     <string name="trains_status_moving_next">Andando, próxima: %1$s</string>
     <string name="trains_status_stopped_between">Parado entre estações</string>
     <string name="trains_status_stopped_between_next">Parado entre estações, próxima: %1$s</string>
+    <string name="trains_checkin_hint">Toque numa estação para avisar que você está nela.</string>
+    <string name="trains_checkin_picked">Estação escolhida: %1$s. O aviso é anônimo, vale por 10 minutos e ajuda a mostrar a lotação.</string>
+    <string name="trains_checkin_button">Estou nesta estação</string>
+    <string name="trains_checkin_active">Presença avisada de forma anônima por 10 minutos.</string>
+    <string name="trains_checkin_cancel">Cancelar presença</string>
     <string name="trains_marker_description">Trem, %1$s, %2$s</string>
 </resources>

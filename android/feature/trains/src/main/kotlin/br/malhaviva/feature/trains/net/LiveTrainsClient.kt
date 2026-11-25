@@ -44,6 +44,19 @@ interface TrainsSource {
 
     /** Lotacao por estacao (polling); null se falhar. */
     suspend fun crowding(direction: Direction): Map<String, CrowdingLevel?>?
+
+    /** "Estou nesta estacao": POST anonimo (sem conta) com id aleatorio; true se o servidor aceitou. */
+    suspend fun checkIn(
+        direction: Direction,
+        stationId: String,
+        id: String,
+    ): Boolean
+
+    suspend fun cancelCheckIn(
+        direction: Direction,
+        stationId: String,
+        id: String,
+    ): Boolean
 }
 
 /**
@@ -99,6 +112,40 @@ class LiveTrainsClient(
     override suspend fun crowding(direction: Direction): Map<String, CrowdingLevel?>? =
         get("$base/v1/corridors/$CORRIDOR/stations/crowding?direction=${direction.wire}")
             ?.let(TrainsWire::parseCrowding)
+
+    override suspend fun checkIn(
+        direction: Direction,
+        stationId: String,
+        id: String,
+    ): Boolean =
+        send(
+            "POST",
+            "$base/v1/corridors/$CORRIDOR/stations/$stationId/checkins",
+            """{"direction":"${direction.wire}","checkin_id":"$id"}""".toByteArray(),
+        )
+
+    override suspend fun cancelCheckIn(
+        direction: Direction,
+        stationId: String,
+        id: String,
+    ): Boolean =
+        send(
+            "DELETE",
+            "$base/v1/corridors/$CORRIDOR/stations/$stationId/checkins/$id?direction=${direction.wire}",
+            null,
+        )
+
+    private suspend fun send(
+        method: String,
+        url: String,
+        body: ByteArray?,
+    ): Boolean =
+        try {
+            val headers = mapOf("Content-Type" to "application/json")
+            transport.execute(HttpRequest(method, url, headers, body)).status == HttpURLConnection.HTTP_NO_CONTENT
+        } catch (_: IOException) {
+            false
+        }
 
     private suspend fun ProducerScope<TrainsFeed>.emit(event: SseEvent) {
         if (event.type == TRAIN_EVENT) TrainsWire.parseTrain(event.data)?.let { send(TrainsFeed.Train(it)) }

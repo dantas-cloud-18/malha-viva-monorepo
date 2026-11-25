@@ -21,7 +21,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -74,15 +76,26 @@ fun TrainsScreen(
             viewModel.setActive(false)
         }
     }
-    TrainsContent(state, viewModel::selectDirection, viewModel::retry, modifier)
+    TrainsContent(
+        state,
+        viewModel::selectDirection,
+        viewModel::retry,
+        modifier,
+        viewModel::checkIn,
+        viewModel::cancelCheckIn,
+    )
 }
 
+// callbacks da tela (direcao, retry, check-in) sao parametros de proposito: estado sobe, eventos descem
+@Suppress("LongParameterList")
 @Composable
 fun TrainsContent(
     state: TrainsState,
     onDirection: (Direction) -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    onCheckIn: (String) -> Unit = {},
+    onCancelCheckIn: () -> Unit = {},
 ) {
     val views = remember(state) { state.views() }
     val health = lineHealth(state, views)
@@ -101,7 +114,7 @@ fun TrainsContent(
         )
         val line = state.line
         when {
-            line != null -> LineContent(state, line, views)
+            line != null -> LineContent(state, line, views, onCheckIn, onCancelCheckIn)
             state.networkError -> NetworkError(onRetry)
             else ->
                 RefreshIndicator(
@@ -146,7 +159,10 @@ private fun LineContent(
     state: TrainsState,
     line: LineNetwork,
     views: List<TrainView>,
+    onCheckIn: (String) -> Unit,
+    onCancelCheckIn: () -> Unit,
 ) {
+    var picked by remember { mutableStateOf<String?>(null) }
     if (views.any { it.situation == Situation.StoppedBetweenStations }) {
         Text(
             stringResource(R.string.trains_alert_stopped),
@@ -183,6 +199,7 @@ private fun LineContent(
                     },
                 state = if (here) StopState.Current else StopState.Upcoming,
                 detail = crowdingLabel(state.crowding[station.id]),
+                onClick = { picked = station.id },
             )
         }
     Box(Modifier.fillMaxWidth().padding(horizontal = MalhaVivaSpacing.l)) {
@@ -192,6 +209,14 @@ private fun LineContent(
             TrainOnLine(view, index, nearestName(line, view))
         }
     }
+    CheckInPanel(
+        state.checkIn,
+        picked?.let { id ->
+            line.stations.firstOrNull { it.id == id }
+        },
+        onCheckIn,
+        onCancelCheckIn,
+    )
     if (views.isNotEmpty()) TrainList(views, line)
 }
 

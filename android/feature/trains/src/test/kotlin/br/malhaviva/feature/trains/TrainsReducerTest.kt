@@ -144,4 +144,14 @@ class TrainsReducerTest {
         assertTrue(reduceTrains(s, TrainsIntent.DirectionSelected(Direction.SantaCruzToCentral)).crowding.isEmpty())
         assertTrue(reduceTrains(s, TrainsIntent.CrowdingLoaded(emptyMap())).crowding.isEmpty())
     }
+
+    @Test
+    fun `check-in lasts until expiry and is cleared by cancel or direction change`() {
+        val ci = StationCheckIn("S", Direction.CentralToSantaCruz, "id", 10_000)
+        val s = run(TrainsIntent.CheckInChanged(ci))
+        assertEquals(ci, run(TrainsIntent.Tick(9_999), from = s).checkIn)
+        assertEquals(null, run(TrainsIntent.Tick(10_000), from = s).checkIn)
+        assertEquals(null, run(TrainsIntent.CheckInChanged(null), from = s).checkIn)
+        assertEquals(null, run(TrainsIntent.DirectionSelected(Direction.SantaCruzToCentral), from = s).checkIn)
+    }
 }

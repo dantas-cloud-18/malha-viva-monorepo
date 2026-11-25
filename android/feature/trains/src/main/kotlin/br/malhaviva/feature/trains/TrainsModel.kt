@@ -87,6 +87,9 @@ object TrainsPolicy {
     const val LOW_CONFIDENCE = 0.5
     const val TICK_MS = 1_000L
     const val CROWDING_POLL_MS = 15_000L
+
+    /** Validade do "Estou nesta estacao" (igual ao servidor, RIPD R3). */
+    const val CHECKIN_TTL_MS = 10 * 60_000L
     const val MS_PER_S = 1000.0
     const val S_PER_MIN = 60.0
     const val MAX_ETA_MIN = 99

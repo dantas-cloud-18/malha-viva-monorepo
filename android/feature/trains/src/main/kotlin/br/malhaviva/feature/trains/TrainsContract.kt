@@ -5,6 +5,14 @@ import br.malhaviva.core.designsystem.TrainStatus
 /** Estado da conexao ao vivo. Reconnecting inclui as tentativas com polling de reserva. */
 enum class Link { Idle, Connecting, Live, Reconnecting }
 
+/** Check-in anonimo ativo: o id aleatorio so existe aqui (memoria) e no servidor por 10 min. */
+data class StationCheckIn(
+    val stationId: String,
+    val direction: Direction,
+    val id: String,
+    val expiresAtMs: Long,
+)
+
 data class TrainsState(
     val direction: Direction = Direction.CentralToSantaCruz,
     val line: LineNetwork? = null,
@@ -16,6 +24,7 @@ data class TrainsState(
     val lastUpdateMs: Long? = null,
     /** Lotacao por estacao; estacao ausente ou nula = "sem dados" (k-anonimato no servidor). */
     val crowding: Map<String, CrowdingLevel?> = emptyMap(),
+    val checkIn: StationCheckIn? = null,
 )
 
 sealed interface TrainsIntent {
@@ -55,6 +64,11 @@ sealed interface TrainsIntent {
         val crowding: Map<String, CrowdingLevel?>,
     ) : TrainsIntent
 
+    /** Check-in novo ou, com null, cancelado. */
+    data class CheckInChanged(
+        val checkIn: StationCheckIn?,
+    ) : TrainsIntent
+
     data class Tick(
         val nowMs: Long,
     ) : TrainsIntent
@@ -81,10 +95,12 @@ fun reduceTrains(
                 lastUpdateMs = intent.atMs,
             )
         is TrainsIntent.CrowdingLoaded -> state.copy(crowding = intent.crowding)
+        is TrainsIntent.CheckInChanged -> state.copy(checkIn = intent.checkIn)
         is TrainsIntent.StreamLost -> state.copy(link = Link.Reconnecting, reconnectAttempt = intent.attempt)
         is TrainsIntent.Tick ->
             state.copy(
                 nowMs = intent.nowMs,
+                checkIn = state.checkIn?.takeIf { intent.nowMs < it.expiresAtMs },
                 trains = state.trains.filterValues { intent.nowMs - it.receivedAtMs <= TrainsPolicy.DROP_MS },
             )
     }
@@ -100,6 +116,7 @@ private fun selectDirection(
             direction = direction,
             trains = emptyMap(),
             crowding = emptyMap(),
+            checkIn = null,
             lastUpdateMs = null,
             reconnectAttempt = 0,
             link = if (state.link == Link.Idle) Link.Idle else Link.Connecting,
