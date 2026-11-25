@@ -970,7 +970,8 @@ paths:
       summary: Corrigir dados (LGPD art. 18, III)
       description: >
         Corrige o `handle` (único, 409 se indisponível) e define ou apaga o `gender` opcional (valor inválido: 400
-        `invalid_gender`). Corpo sem nenhum dos dois: 400. Telefone e e-mail são corrigidos em `/me/contacts`
+        `invalid_gender`). `gender` está em stand-by (desativado por padrão, `MALHAVIVA_GENDER_ENABLED`): com a
+        funcionalidade desligada, qualquer corpo com `gender` responde 400 `feature_disabled`. Corpo sem nenhum dos dois: 400. Telefone e e-mail são corrigidos em `/me/contacts`
         (com OTP). A faixa etária não é autoatendimento (evita burlar o portão de idade): correção pelo canal do
         Encarregado.
       security:
@@ -1097,7 +1098,7 @@ components:
         guardian: { $ref: "#/components/schemas/Guardian" }
         gender:
           allOf: [{ $ref: "#/components/schemas/Gender" }]
-          description: Opcional. Ausente = não informado (diferente de `prefer_not_to_say`). Valor fora do enum responde 400 `invalid_gender`.
+          description: "Em stand-by (desativado por padrão, `MALHAVIVA_GENDER_ENABLED`). Desligado, o servidor ignora o campo e a conta fica sem gênero. Ligado, é opcional; ausente = não informado (diferente de `prefer_not_to_say`) e valor fora do enum responde 400 `invalid_gender`."
         phone: { type: string, pattern: "^\\+[1-9][0-9]{7,14}$", description: E.164. }
         email: { type: string, format: email, maxLength: 254 }
         captcha_token: { type: string, description: Exigido quando há telefone ou e-mail (o cadastro envia mensagem). }
@@ -1121,7 +1122,7 @@ components:
         age_bracket: { $ref: "#/components/schemas/AgeBracket" }
         status: { $ref: "#/components/schemas/AccountStatus" }
         gender:
-          description: "`null` quando não informado."
+          description: "`null` quando não informado; sempre `null` enquanto o gênero estiver em stand-by (desativado por padrão)."
           oneOf:
             - { $ref: "#/components/schemas/Gender" }
             - { type: "null" }
@@ -1341,6 +1342,7 @@ components:
       type: string
       enum: [male, female, non_binary, prefer_not_to_say]
       description: >
+        Em stand-by: funcionalidade desativada por padrão (`MALHAVIVA_GENDER_ENABLED`), nada é coletado nesta versão.
         Gênero autodeclarado e opcional, só para estatísticas agregadas e anônimas de perfil de uso (buckets com menos
         de 5 contas são suprimidos). Nunca é exibido por pessoa nem cruzado com localização, viagens ou telemetria.
         Ausente/null = não informado, o que é diferente de `prefer_not_to_say`. Apagado na exclusão da conta.

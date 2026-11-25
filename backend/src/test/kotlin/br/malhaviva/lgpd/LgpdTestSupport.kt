@@ -37,6 +37,7 @@ class LgpdEnv(
     ds: DataSource,
     val sender: FakeSender = FakeSender(),
     limiters: AuthLimiters = AuthLimiters(RateLimiter(1000.0, 1.0), RateLimiter(1000.0, 1.0), RateLimiter(1000.0, 1.0)),
+    genderEnabled: Boolean = true,
 ) {
     private val clock = System::currentTimeMillis
     private val accounts = JdbcAccountRepository(ds)
@@ -85,6 +86,7 @@ class LgpdEnv(
                     accounts,
                     JdbcContactRepository(ds),
                 ),
+            genderEnabled = genderEnabled,
         )
 }
 

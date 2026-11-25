@@ -38,9 +38,9 @@ Sobre "efêmero": no Play significa dado só em memória, não retido além da s
 | Número de telefone | Sim | Não | **Opcional** (só segurança e recuperação) | Gerenciamento de conta; Prevenção de fraude, segurança e conformidade | |
 | Endereço, raça/etnia, orientação sexual, crenças | Não | | | | |
 | Outras informações pessoais (faixa etária) | Sim | Não | **Obrigatório** | Gerenciamento de conta; Conformidade | Ver nota |
-| Outras informações pessoais (gênero) | Sim | Não | **Opcional** | Análises | Ver nota de gênero |
+| Outras informações pessoais (gênero) | **Não** (em stand-by, não coletado nesta versão; não declarar) | Não | n/a | n/a | Ver nota de gênero |
 
-Nota (gênero): campo opcional no cadastro (`gender` em `openapi.yaml`; masculino, feminino, não-binário, prefiro não dizer; vazio = não informado), editável e apagável em "Privacidade e meus dados". Usado só em estatística agregada e anônima (buckets com menos de 5 contas suprimidos), nunca por pessoa nem junto de localização ou viagens. Apagado na exclusão da conta. Fica em "Outras informações pessoais" (o Play lista identidade de gênero ali).
+Nota (gênero): **em stand-by (não coletado nesta versão)**; a linha acima não deve ser declarada no formulário enquanto o app não coletar. Ao reativar (`GENDER_ENABLED` no app e `MALHAVIVA_GENDER_ENABLED` no servidor), declarar como Coletado/Opcional/Análises. Descrição da funcionalidade: campo opcional no cadastro (`gender` em `openapi.yaml`; masculino, feminino, não-binário, prefiro não dizer; vazio = não informado), editável e apagável em "Privacidade e meus dados". Usado só em estatística agregada e anônima (buckets com menos de 5 contas suprimidos), nunca por pessoa nem junto de localização ou viagens. Apagado na exclusão da conta. Fica em "Outras informações pessoais" (o Play lista identidade de gênero ali).
 
 Nota (idade): `POST /auth/accounts` exige `birth_date`; o servidor deriva a faixa (`under_12`, `teen_12_17`, `adult`), **descarta a data** e grava só a faixa. O Play não tem categoria própria de idade; declarar em "Outras informações pessoais" evita subdeclarar. Para menores de 12 anos, o contato do responsável (telefone ou e-mail) também é coletado (`/auth/parental-consent/*`), com as mesmas categorias acima e finalidade "Conformidade". [VERIFICAR contra o fluxo final]
 

@@ -33,4 +33,6 @@ class AuthComponents(
     val recovery: RecoveryComponents? = null,
     /** LGPD (idade, consentimento, direitos do titular); null = desligada (cadastro sem portao de idade). */
     val lgpd: LgpdComponents? = null,
+    /** Genero opcional em stand-by (MALHAVIVA_GENDER_ENABLED); desligado ignora no cadastro e recusa no PATCH. */
+    val genderEnabled: Boolean = false,
 )

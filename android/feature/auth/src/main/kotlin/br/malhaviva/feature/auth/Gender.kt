@@ -1,5 +1,8 @@
 package br.malhaviva.feature.auth
 
+// stand-by: decisão do produto; reativar trocando para true
+internal const val GENDER_ENABLED = false
+
 /** Genero opcional e autodeclarado; `null` (nao informado) e diferente de [PreferNotToSay]. So estatistica agregada. */
 enum class Gender(
     val wire: String,

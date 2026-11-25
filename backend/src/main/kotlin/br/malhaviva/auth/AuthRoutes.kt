@@ -112,7 +112,7 @@ private suspend fun signupRoute(
         call.throttled()
     } else {
         call.withBody<CreateAccountDto> { dto ->
-            if (dto?.gender != null && Gender.fromWire(dto.gender) == null) {
+            if (c.genderEnabled && dto?.gender != null && Gender.fromWire(dto.gender) == null) {
                 call.problem(HttpStatusCode.BadRequest, "Invalid gender", "invalid_gender")
             } else {
                 respondSignup(call, c, dto)
@@ -163,9 +163,11 @@ private suspend fun registerAccount(
     age: SignupAge.Ok?,
 ) {
     val bracket = age?.bracket ?: AgeBracket.ADULT
-    val result = c.auth.register(dto.handle, dto.password, bracket, Gender.fromWire(dto.gender))
+    // stand-by: com a flag desligada o campo e ignorado
+    val gender = if (c.genderEnabled) Gender.fromWire(dto.gender) else null
+    val result = c.auth.register(dto.handle, dto.password, bracket, gender)
     if (result == RegisterResult.Created) afterSignup(c, dto, age, call.clientIp())
-    respondRegister(call, result, dto.handle, bracket, Gender.fromWire(dto.gender))
+    respondRegister(call, result, dto.handle, bracket, gender)
 }
 
 /** Contatos do cadastro, registro de acesso e, para menor de 12, o OTP ao responsavel. */

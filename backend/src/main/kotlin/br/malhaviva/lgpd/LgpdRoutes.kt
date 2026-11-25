@@ -210,7 +210,7 @@ private suspend fun patchMe(
     l: LgpdComponents,
 ) {
     val id = call.sensitiveAccountIdOrUnauthorized(c) ?: return
-    call.withBody<JsonObject> { body -> patchBody(call, l, id, body) }
+    call.withBody<JsonObject> { body -> patchBody(call, l, id, body, c.genderEnabled) }
 }
 
 /** Corpo lido como JsonObject: `gender: null` (apagar) precisa ser distinto de `gender` ausente (nao mexe). */
@@ -219,12 +219,15 @@ private suspend fun patchBody(
     l: LgpdComponents,
     id: UUID,
     body: JsonObject?,
+    genderEnabled: Boolean,
 ) {
     val handle = body?.get("handle")
     val gender = body?.get("gender")
     val handleText = (handle as? JsonPrimitive)?.takeIf { it.isString }?.content
     val genderValue = Gender.fromWire((gender as? JsonPrimitive)?.takeIf { it.isString }?.content)
     when {
+        gender != null && !genderEnabled ->
+            call.problem(HttpStatusCode.BadRequest, "Feature disabled", "feature_disabled")
         body == null || (handle == null && gender == null) || (handle != null && handleText == null) ->
             call.problem(HttpStatusCode.BadRequest, "Malformed request")
         gender != null && gender !is JsonNull && genderValue == null ->

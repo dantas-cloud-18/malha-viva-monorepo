@@ -32,7 +32,7 @@ Dois planos separados por desenho:
 | Eventos consolidados de trem | Agregado | `train_events` (V2): trem, evento, nº de dispositivos, confiança | Histórico operacional | Dado anonimizado se respeitar o k (seção 7) | A definir |
 | IP de requisição | Operacional | Log de acesso (ALB/app) | Segurança, limites, Marco Civil | Obrigação legal, art. 7º, II; legítimo interesse nos limites | 6 meses |
 | Veredito de atestação (Play Integrity, App Attest) | Telemetria | **NAO IMPLEMENTADO** | Antifraude | Legítimo interesse (LIA.md) | Proposta: não reter |
-| Gênero (opcional) | Identidade | `accounts.gender` (V12), nulo = não informado; opções: masculino, feminino, não-binário, prefiro não dizer | **Só** estatística agregada e anônima de perfil de uso | **Consentimento, art. 7º, I e art. 8º**, dado pelo próprio preenchimento do campo opcional | Vida da conta; apagado na exclusão |
+| Gênero (opcional) | Identidade | **Em stand-by (não coletado nesta versão).** `accounts.gender` (V12), nulo = não informado; opções: masculino, feminino, não-binário, prefiro não dizer | **Só** estatística agregada e anônima de perfil de uso | **Consentimento, art. 7º, I e art. 8º**, dado pelo próprio preenchimento do campo opcional | Vida da conta; apagado na exclusão |
 | Idade ou data de nascimento | Identidade | **NAO IMPLEMENTADO** (verificação de idade a propor) | Proteção de menores | Obrigação legal (ECA Digital) | A definir |
 | Registro de consentimento versionado | Identidade | **NAO IMPLEMENTADO** | Prova do consentimento | Obrigação legal / exercício de direitos | [PRAZO] |
 
@@ -46,7 +46,7 @@ Não são coletados: modelo do aparelho, ID de publicidade ou IP junto às posi�
 | Localização | Consentimento destacado, art. 8º | Opt-in, desligado por padrão. Revogável a 1 toque ("Parar" persistente). O app funciona sem ele (horário previsto e trens de outros usuários). Registro de consentimento **separado** das posições |
 | Antifraude | Legítimo interesse, art. 7º, IX | LIA.md. Dados mínimos, sem perfil por pessoa |
 | Marketing | Consentimento separado, art. 8º | Nunca para menores. Hoje não há marketing |
-| Perfil de uso (gênero) | Consentimento, art. 7º, I | Campo opcional, nunca exigido. Gênero não é dado sensível (art. 5º, II), mas tratamos com minimização: só relatórios agregados, bucket com menos de 5 contas é suprimido (`GenderStatsRepository`), nunca por pessoa, nunca cruzado com localização, viagens ou telemetria. Editável ou apagável a qualquer momento em "Privacidade e meus dados" |
+| Perfil de uso (gênero) | Consentimento, art. 7º, I | **Em stand-by (não coletado nesta versão).** Campo opcional, nunca exigido. Gênero não é dado sensível (art. 5º, II), mas tratamos com minimização: só relatórios agregados, bucket com menos de 5 contas é suprimido (`GenderStatsRepository`), nunca por pessoa, nunca cruzado com localização, viagens ou telemetria. Editável ou apagável a qualquer momento em "Privacidade e meus dados" |
 | Logs de acesso | Obrigação legal, Marco Civil art. 15 | 6 meses |
 | Menores | Art. 14 LGPD e ECA Digital (Lei 15.211/2025) | Melhor interesse da criança; ver POLITICA-MENORES.md |
 

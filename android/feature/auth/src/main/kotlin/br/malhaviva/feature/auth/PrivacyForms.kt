@@ -96,11 +96,13 @@ private fun PrivacyMain(
     OutlinedButton({ onIntent(PrivacyIntent.StartEditHandle) }, enabled = !state.busy) {
         Text(stringResource(R.string.auth_privacy_edit_handle))
     }
-    if (state.genderLoaded) {
-        Hint(stringResource(R.string.auth_privacy_gender_current, stringResource(genderLabel(state.gender))))
-    }
-    OutlinedButton({ onIntent(PrivacyIntent.StartEditGender) }, enabled = !state.busy && state.genderLoaded) {
-        Text(stringResource(R.string.auth_privacy_edit_gender))
+    if (GENDER_ENABLED) {
+        if (state.genderLoaded) {
+            Hint(stringResource(R.string.auth_privacy_gender_current, stringResource(genderLabel(state.gender))))
+        }
+        OutlinedButton({ onIntent(PrivacyIntent.StartEditGender) }, enabled = !state.busy && state.genderLoaded) {
+            Text(stringResource(R.string.auth_privacy_edit_gender))
+        }
     }
     OutlinedButton({ onIntent(PrivacyIntent.StartDelete) }, enabled = !state.busy) {
         Text(stringResource(R.string.auth_privacy_delete))

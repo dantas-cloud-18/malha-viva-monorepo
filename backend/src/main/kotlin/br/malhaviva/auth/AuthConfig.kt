@@ -26,6 +26,11 @@ private val log = LoggerFactory.getLogger("br.malhaviva.auth.AuthConfig")
 const val POLICY_VERSION_ENV = "MALHAVIVA_POLICY_VERSION"
 private const val DEFAULT_POLICY_VERSION = "2026-11-25"
 
+/** Genero opcional em stand-by: so com `true` o servidor aceita o campo. */
+const val GENDER_ENABLED_ENV = "MALHAVIVA_GENDER_ENABLED"
+
+private fun genderOn(env: (String) -> String?) = env(GENDER_ENABLED_ENV) == "true"
+
 /** `true` libera o [NoopCaptchaVerifier] (aceita qualquer token). Somente desenvolvimento. */
 const val DEV_CAPTCHA_ENV = "MALHAVIVA_DEV_CAPTCHA"
 
@@ -107,6 +112,6 @@ object AuthConfig {
                 accounts,
                 contacts,
             )
-        return AuthComponents(auth, sessions, access, recovery = recovery, lgpd = lgpd)
+        return AuthComponents(auth, sessions, access, recovery = recovery, lgpd = lgpd, genderEnabled = genderOn(env))
     }
 }

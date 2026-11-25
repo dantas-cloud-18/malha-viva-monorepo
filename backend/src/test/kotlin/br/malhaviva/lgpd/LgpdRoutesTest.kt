@@ -285,6 +285,23 @@ class LgpdRoutesTest : PostgresIntegrationTest() {
         }
 
     @Test
+    fun `gender in stand-by is ignored at signup and refused on patch`() =
+        authApp(LgpdEnv(ds, genderEnabled = false).components) {
+            val ignored = signup("@sb_gen_01", ADULT_BIRTH, ""","gender":"female"""")
+            assertEquals(HttpStatusCode.Created, ignored.status)
+            assertTrue(ignored.json().getValue("gender") is JsonNull)
+            assertNull(scalars("SELECT gender FROM accounts WHERE handle = '@sb_gen_01'").single())
+            val bad = signup("@sb_gen_02", ADULT_BIRTH, ""","gender":"outro"""")
+            assertEquals(HttpStatusCode.Created, bad.status)
+            val token = login("@sb_gen_01")
+            val refused = send(HttpMethod.Patch, "/me", token, """{"gender":"female"}""")
+            assertEquals(HttpStatusCode.BadRequest, refused.status)
+            assertEquals("feature_disabled", refused.json().text("detail"))
+            assertTrue(httpGet("/me", token).json().getValue("gender") is JsonNull)
+            assertEquals(HttpStatusCode.OK, send(HttpMethod.Patch, "/me", token, """{"handle":"@sb_gen_03"}""").status)
+        }
+
+    @Test
     fun `patch sets, keeps and clears gender and validates it`() =
         authApp(LgpdEnv(ds).components) {
             val token = adultToken("@patch_gen1")

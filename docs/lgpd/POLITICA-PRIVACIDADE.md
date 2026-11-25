@@ -21,7 +21,7 @@ O Malha Viva é operado por [RAZÃO SOCIAL], CNPJ [CNPJ], [ENDEREÇO]. Somos o c
 |---|---|---|
 | Nome de usuário (`@usuario`) e senha (guardada só como hash) | Criar conta e entrar | Execução de contrato, art. 7º, V |
 | Telefone e e-mail (opcionais) | **Só** segurança e recuperação da conta. Não usamos para marketing | Execução de contrato, art. 7º, V |
-| Gênero (opcional) | Estatísticas agregadas e anônimas de perfil de uso. Nunca aparece para outras pessoas e nunca é ligado à sua localização ou às suas viagens. Só entram nos números grupos com 5 ou mais pessoas. Você pode deixar em branco, mudar ou apagar a qualquer momento | Consentimento, art. 7º, I |
+| Gênero (opcional) | **Em stand-by (não coletado nesta versão).** Se for reativado: estatísticas agregadas e anônimas de perfil de uso. Nunca aparece para outras pessoas e nunca é ligado à sua localização ou às suas viagens. Só entram nos números grupos com 5 ou mais pessoas. Você pode deixar em branco, mudar ou apagar a qualquer momento | Consentimento, art. 7º, I |
 | Dispositivos conectados à conta (nome do aparelho, datas) | Mostrar e encerrar sessões | Execução de contrato |
 | Posição durante a viagem, se você ativar "Estou no trem" ou "Estou na estação" | Mostrar onde os trens estão e se a estação está cheia | Consentimento, art. 7º, I e art. 8º |
 | Informações técnicas de segurança (verificação de que o app é legítimo, limites de uso) | Impedir fraude e abuso | Legítimo interesse, art. 7º, IX |
