@@ -644,7 +644,7 @@ paths:
         - telemetryToken: []
       description: >
         Lote de amostras de um aparelho. O aparelho já descartou pontos fora do corredor e cortou
-        início e fim da viagem. Cadência: o app envia um lote a cada 15 s durante a viagem (cada lote traz as
+        início e fim da viagem. Cadência: o app envia um lote a cada 5 s durante a viagem (cada lote traz as
         amostras novas, em geral 2 ou 3); os últimos 300 m da viagem ficam retidos até o fim, por privacidade.
         O servidor infere o sentido pelo avanço (50 m ou mais) entre a primeira e a última amostra do lote; com
         menos avanço usa `bearing_deg` da última amostra (só se `speed_mps` for 1 m/s ou mais) e, sem rumo,

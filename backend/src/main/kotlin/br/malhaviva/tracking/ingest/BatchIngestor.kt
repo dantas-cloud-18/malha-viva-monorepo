@@ -36,7 +36,7 @@ private val NONCE_LENGTH = 16..64
 private val EPOCH_STATE_TTL: Duration = Duration.ofMinutes(15)
 
 private const val TOKEN_CAPACITY = 10.0
-private const val TOKEN_REFILL_PER_S = 0.2
+private const val TOKEN_REFILL_PER_S = 0.5
 private const val IP_CAPACITY = 120.0
 private const val IP_REFILL_PER_S = 2.0
 
