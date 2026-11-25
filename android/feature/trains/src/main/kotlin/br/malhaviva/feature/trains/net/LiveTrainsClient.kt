@@ -65,6 +65,7 @@ interface TrainsSource {
  * por polling com o mesmo ritmo do backoff (1 s ate 30 s). Uma conexao so conta como estavel (zera o backoff)
  * depois de [stableAfterMs] aberta, para nao martelar o servidor se ele fechar logo apos abrir.
  */
+@Suppress("TooManyFunctions")
 class LiveTrainsClient(
     private val baseUrl: () -> String,
     private val transport: HttpTransport,
@@ -76,6 +77,38 @@ class LiveTrainsClient(
     private val base get() = baseUrl().trimEnd('/')
 
     override fun feed(direction: Direction): Flow<TrainsFeed> =
+        if (pollOnly()) pollFeed(direction) else sseFeed(direction)
+
+    // Tunel rapido da Cloudflare (trycloudflare.com) nao repassa SSE: so polling curto.
+    private fun pollOnly() =
+        java.net
+            .URI(base)
+            .host
+            .orEmpty()
+            .endsWith(QUICK_TUNNEL_SUFFIX)
+
+    private fun pollFeed(direction: Direction): Flow<TrainsFeed> =
+        channelFlow {
+            var attempt = 0
+            var opened = false
+            send(TrainsFeed.Connecting)
+            while (true) {
+                val trains = snapshot(direction)
+                if (trains != null) {
+                    if (attempt != 0 || !opened) send(TrainsFeed.Opened)
+                    opened = true
+                    attempt = 0
+                    send(TrainsFeed.Snapshot(trains))
+                    delay(POLL_MS)
+                } else {
+                    attempt++
+                    send(TrainsFeed.Lost(attempt))
+                    delay(backoff.delayMs(attempt, null))
+                }
+            }
+        }
+
+    private fun sseFeed(direction: Direction): Flow<TrainsFeed> =
         channelFlow {
             var attempt = 0
             while (true) {
@@ -168,6 +201,8 @@ class LiveTrainsClient(
     companion object {
         const val CORRIDOR = "RAMAL_SANTA_CRUZ"
         const val STABLE_AFTER_MS = 30_000L
+        const val POLL_MS = 5_000L
+        private const val QUICK_TUNNEL_SUFFIX = ".trycloudflare.com"
         private const val TRAIN_EVENT = "train"
     }
 }
