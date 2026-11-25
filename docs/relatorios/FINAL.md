@@ -15,7 +15,7 @@ Fonte do roteiro: BRIEF (fases 0 a 7 e "Entrega final"). Documentos de apoio no 
 | 4. Segurança | Modelo de ameaças STRIDE, `SECURITY.md`, auth com argon2id, MFA TOTP com códigos de backup, recuperação de conta, revisão de segurança do backend, CI de segurança (gitleaks, Semgrep, Trivy, osv-scanner) | Feita, com pendências em aberto (seção 3 e 5) |
 | 5. LGPD e menores | RIPD, LIA, política de privacidade, termos, retenção, incidentes, operadores, encarregado, política de menores; registro de consentimento, faixa etária com consentimento parental e exportação de dados no backend; k-anonimato de trens (k=3) e de lotação de estação (k=5, com histerese) | Feita em código e rascunhos; [PENDENTE: aprovação do RIPD pelo encarregado, controlador e revisão jurídica] |
 | 6. Publicação | Rascunhos de Play (Data Safety, localização em segundo plano, classificação, público) e App Store (ficha, `PrivacyInfo.xcprivacy`), checklist de publicação | Rascunhos prontos; [PENDENTE: submissão, vídeo do fluxo, TestFlight e teste fechado] |
-| 7. Desligamento do Apps Script | Plano (`docs/planos/FASE-7.md`), inventário (7.1), harness de paridade e relatório (7.2, veredito parcial) | Etapas 7.1 e 7.2 feitas; 7.3 a 7.7 [PENDENTE: dependem das decisões P1 a P4 do plano] |
+| 7. Desligamento do Apps Script | Plano (`docs/planos/FASE-7.md`), inventário (7.1), harness de paridade e relatório (7.2, segunda rodada: algoritmo equivalente no sintético, campo não comprovado) | Etapas 7.1 e 7.2 feitas; 7.3 a 7.7 [PENDENTE: dependem das decisões P1 a P4 do plano] |
 
 ## 2. Métricas
 
@@ -27,7 +27,7 @@ Medidas em 2026-11-25 sobre `db40a5d`, com `.\gradlew.bat ktlintCheck detekt tes
 | Testes do backend | 242 (35 classes), todos verdes; inclui o harness de paridade |
 | Arquivos de teste Android (`*Test.kt`) | 35 |
 | Resultado dos testes Android e iOS | [PENDENTE: executar `android` e `ios` e registrar contagem] |
-| Paridade do motor (sintética, 6 cenários) | parcial; ver `docs/fase7/PARIDADE.md` |
+| Paridade do motor (sintética, 6 cenários) | algoritmo equivalente nos 6 cenários (K=1); em campo não comprovada; ver `docs/fase7/PARIDADE.md` |
 | Latência e disponibilidade em produção | [PENDENTE: backend ainda não está no ar (P1)] |
 | Usuários, viagens e posições coletadas | [PENDENTE: não há coleta em produção] |
 
@@ -60,7 +60,7 @@ Não há afirmação de "100% seguro". Riscos conhecidos hoje:
 3. **Reidentificação por trajetória** e **trem ou estação com poucas pessoas**: mitigados por k-anonimato (trem k=3, estação k=5), ID efêmero e corte de 300 m; risco residual global do RIPD é "alto" até a aprovação formal e os testes de reidentificação previstos (RIPD §6 e §7). [PENDENTE: aprovação do RIPD.]
 4. **Menores**: bloqueio por faixa etária no app; [PENDENTE: revisão jurídica da política de menores e do consentimento parental].
 5. **Recuperação de conta** sem provedor de SMS e e-mail em produção (não entrega OTP) e **sem certificate pinning** até existir domínio.
-6. **Paridade parcial do motor**: o backend novo esconde trens de 1 e 2 celulares por desenho, depende do intervalo de envio do app (sem sentido com 1 amostra por lote, posição atrasada e ids instáveis com envio lento) e rejeita amostras a mais de 60 m da linha; ETA, situação textual e alerta de parado não têm equivalente (`docs/fase7/PARIDADE.md`).
+6. **Paridade do motor só sintética**: o algoritmo novo ficou equivalente ao `Motor.gs` nos 6 cenários (posição projetada para agora, sentido por rumo, limite lateral de 150 m, ETA, situação e alerta de parado no contrato). Falta rodar sobre posições reais; o envio ao vivo (a cada 15 s, retendo 300 m) e o limiar K=1 aumentam o risco do RIPD R1/R2 [PENDENTE: revisão do Encarregado] (`docs/fase7/PARIDADE.md`).
 7. **Legado Apps Script no ar** até a etapa 7.6: credencial de envio compartilhada na URL, sem autenticação nas funções da página, posições ligadas a nome na planilha.
 8. **Revogação de credenciais do legado é irreversível**: só com confirmação explícita.
 9. **Dependência de terceiros** (OpenStreetMap ODbL: manter atribuição; provedor de nuvem; transferência internacional, RIPD R11).
@@ -81,7 +81,7 @@ Fase 7:
 - [PENDENTE: 7.4 migração final (depende de P4): CSV, descarte de "Quem" e id do aparelho, contagem por aba e checksum de amostra]
 - [PENDENTE: 7.5 corte e 7 dias de observação (depende de P3)]
 - [PENDENTE: 7.6 remover gatilhos, desfazer implantações, revogar credenciais e arquivar script e planilha em somente leitura, com registro em `docs/relatorios`]
-- [PENDENTE: repetir a paridade com posições reais e definir intervalo de envio e requisitos de ETA e alertas]
+- [PENDENTE: repetir a paridade com posições reais e medir em campo a retenção de 300 m no envio ao vivo]
 - [PENDENTE: checklist do painel do Apps Script (inventário, seção 7)]
 
 Segurança, privacidade e publicação:
