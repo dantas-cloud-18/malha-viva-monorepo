@@ -154,4 +154,8 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.org.json)
+    testImplementation(libs.coroutines.test)
 }
