@@ -21,6 +21,8 @@ import br.malhaviva.feature.auth.net.PrivacyApi
 import br.malhaviva.feature.tracking.net.HttpBatchUploader
 import br.malhaviva.feature.tracking.net.IntegrityTokenProvider
 import br.malhaviva.feature.tracking.net.NetworkRouteProvider
+import br.malhaviva.feature.trains.net.LiveTrainsClient
+import br.malhaviva.feature.trains.net.UrlConnectionSseSource
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -107,6 +109,16 @@ object TrackingModule {
         transport: HttpTransport,
         scope: CoroutineScope,
     ): NetworkRouteProvider = NetworkRouteProvider(BuildConfig.API_BASE_URL, transport, scope)
+}
+
+/** Trens ao vivo (publico, sem sessao): SSE com reconexao e polling de reserva. */
+@Module
+@InstallIn(SingletonComponent::class)
+object TrainsModule {
+    @Provides
+    @Singleton
+    fun liveTrains(transport: HttpTransport): LiveTrainsClient =
+        LiveTrainsClient(BuildConfig.API_BASE_URL, transport, UrlConnectionSseSource())
 }
 
 /** Subfluxos de conta que dependem da API e da sessao. */

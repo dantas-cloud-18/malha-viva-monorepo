@@ -25,6 +25,8 @@ import br.malhaviva.feature.auth.AuthViewModel
 import br.malhaviva.feature.auth.SessionState
 import br.malhaviva.feature.tracking.TrackingScreen
 import br.malhaviva.feature.tracking.TrackingViewModel
+import br.malhaviva.feature.trains.TrainsScreen
+import br.malhaviva.feature.trains.TrainsViewModel
 import kotlinx.coroutines.flow.StateFlow
 
 private enum class Tab(
@@ -33,7 +35,12 @@ private enum class Tab(
     Trains("Trens"),
     Trip("Viagem"),
     Account("Conta"),
+
+    /** Catalogo do design system: so existe em builds de debug. */
+    Catalog("Catálogo"),
 }
+
+private val TABS = Tab.entries.filter { it != Tab.Catalog || BuildConfig.DEBUG }
 
 // Telas que so existem com sessao: se a sessao cair por outro caminho, o fluxo de conta volta ao login.
 private val SESSION_SCREENS =
@@ -46,6 +53,7 @@ fun AppRoot(
     auth: AuthViewModel,
     flows: AuthFlows,
     tracking: TrackingViewModel,
+    trains: TrainsViewModel,
 ) {
     val session by sessionState.collectAsState()
     LaunchedEffect(session) {
@@ -54,7 +62,7 @@ fun AppRoot(
         }
     }
     if (session == SessionState.LoggedIn) {
-        MainShell(auth, flows, tracking)
+        MainShell(auth, flows, tracking, trains)
     } else {
         AuthEntry(auth, flows, Modifier.systemBarsPadding())
     }
@@ -65,13 +73,14 @@ private fun MainShell(
     auth: AuthViewModel,
     flows: AuthFlows,
     tracking: TrackingViewModel,
+    trains: TrainsViewModel,
 ) {
     var selected by rememberSaveable { mutableIntStateOf(Tab.Trains.ordinal) }
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             NavigationBar {
-                Tab.entries.forEach { tab ->
+                TABS.forEach { tab ->
                     NavigationBarItem(
                         selected = selected == tab.ordinal,
                         onClick = { selected = tab.ordinal },
@@ -84,9 +93,10 @@ private fun MainShell(
     ) { padding ->
         Box(Modifier.padding(padding)) {
             when (Tab.entries[selected]) {
-                Tab.Trains -> CatalogScreen()
+                Tab.Trains -> TrainsScreen(trains, Modifier.statusBarsPadding())
                 Tab.Trip -> TrackingScreen(tracking, Modifier.statusBarsPadding())
                 Tab.Account -> AuthEntry(auth, flows, Modifier.statusBarsPadding())
+                Tab.Catalog -> CatalogScreen()
             }
         }
     }

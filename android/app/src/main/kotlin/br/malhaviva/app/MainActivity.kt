@@ -23,6 +23,8 @@ import br.malhaviva.feature.auth.TotpViewModel
 import br.malhaviva.feature.auth.net.AccountApi
 import br.malhaviva.feature.auth.net.PrivacyApi
 import br.malhaviva.feature.tracking.TrackingViewModel
+import br.malhaviva.feature.trains.TrainsViewModel
+import br.malhaviva.feature.trains.net.LiveTrainsClient
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -41,6 +43,8 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var consent: LocationConsentStore
 
+    @Inject lateinit var liveTrains: LiveTrainsClient
+
     // Cada ViewModel e criado sob demanda pela fabrica (os modulos de feature nao usam Hilt).
     private val auth by viewModels<AuthViewModel> {
         factory { AuthViewModel(session, account, "${Build.MANUFACTURER} ${Build.MODEL}") }
@@ -53,6 +57,8 @@ class MainActivity : ComponentActivity() {
         factory { PrivacyViewModel(session, privacyApi, consent) }
     }
 
+    private val trains by viewModels<TrainsViewModel> { factory { TrainsViewModel(liveTrains) } }
+
     // TODO(fase 6): sharingBlocked deve vir da faixa etaria do perfil (menor de 18 anos); hoje o servidor decide.
     private val tracking by viewModels<TrackingViewModel> { factory { TrackingViewModel() } }
 
@@ -60,7 +66,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val flows = AuthFlows(recoveryVm, totpVm, contactsVm, parentalVm, privacyVm)
         setContent {
-            MalhaVivaTheme { AppRoot(session.state, auth, flows, tracking) }
+            MalhaVivaTheme { AppRoot(session.state, auth, flows, tracking, trains) }
         }
     }
 
