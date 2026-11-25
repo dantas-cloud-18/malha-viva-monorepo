@@ -123,6 +123,8 @@ internal suspend fun respondLogin(
         is LoginResult.MfaRequired -> call.respond(MfaChallengeDto(mfaToken = r.mfaToken))
         is LoginResult.MfaEnrollmentRequired -> call.respond(MfaEnrollmentDto(accessToken = r.accessToken))
         is LoginResult.Throttled -> call.throttled(r.retryAfterSeconds.toString())
+        LoginResult.ParentalConsentPending ->
+            call.problem(HttpStatusCode.Forbidden, "Parental consent pending", "parental_consent_pending")
         LoginResult.InvalidMfa -> call.problem(HttpStatusCode.Unauthorized, "Invalid code", "invalid_mfa")
         LoginResult.InvalidCredentials -> call.problem(HttpStatusCode.Unauthorized, "Invalid credentials")
         LoginResult.CaptchaRequired -> call.problem(HttpStatusCode.Forbidden, "Captcha required", "captcha_required")

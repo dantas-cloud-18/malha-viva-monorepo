@@ -3,6 +3,8 @@ package br.malhaviva
 import br.malhaviva.auth.AuthComponents
 import br.malhaviva.auth.AuthConfig
 import br.malhaviva.auth.authRoutes
+import br.malhaviva.lgpd.RetentionConfig
+import br.malhaviva.lgpd.RetentionJob
 import br.malhaviva.platform.Database
 import br.malhaviva.platform.DatabaseConfig
 import br.malhaviva.platform.health.healthRoutes
@@ -59,9 +61,15 @@ fun Application.module(
 ) {
     Database.migrate(dataSource)
 
-    val maintenance = PartitionMaintenance(dataSource)
+    val retention = RetentionConfig.fromEnv(System::getenv)
+    val maintenance = PartitionMaintenance(dataSource, retention.positionTtlHours)
     maintenance.start()
-    monitor.subscribe(ApplicationStopped) { maintenance.stop() }
+    val retentionJob = RetentionJob(dataSource, retention)
+    retentionJob.start()
+    monitor.subscribe(ApplicationStopped) {
+        maintenance.stop()
+        retentionJob.stop()
+    }
 
     installForwardedHeaders()
     install(ContentNegotiation) { json() }

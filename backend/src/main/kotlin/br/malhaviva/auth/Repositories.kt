@@ -6,18 +6,51 @@ import java.util.UUID
 const val ROLE_USER = "user"
 const val ROLE_ADMIN = "admin"
 
+/** Faixa etaria autodeclarada (LGPD art. 14); a data de nascimento nao e guardada. */
+enum class AgeBracket(
+    val wire: String,
+) {
+    UNDER_12("under_12"),
+    TEEN("teen_12_17"),
+    ADULT("adult"),
+    ;
+
+    companion object {
+        fun fromWire(value: String): AgeBracket = entries.first { it.wire == value }
+    }
+}
+
+enum class AccountStatus(
+    val wire: String,
+) {
+    ACTIVE("active"),
+    PENDING_PARENTAL_CONSENT("pending_parental_consent"),
+    DELETED("deleted"),
+    ;
+
+    companion object {
+        fun fromWire(value: String): AccountStatus = entries.first { it.wire == value }
+    }
+}
+
 data class AccountRecord(
     val id: UUID,
     val handle: String,
     val passwordHash: String,
     val role: String = ROLE_USER,
+    val ageBracket: AgeBracket = AgeBracket.ADULT,
+    val status: AccountStatus = AccountStatus.ACTIVE,
 )
 
 interface AccountRepository {
-    /** Cria a conta; null se o @handle ja existe (sem diferenciar maiusculas). */
+    /**
+     * Cria a conta; null se o @handle ja existe (sem diferenciar maiusculas). Menor de 12 nasce
+     * `pending_parental_consent` na mesma insercao (falha fechada: nunca existe ativa sem consentimento).
+     */
     fun create(
         handle: String,
         passwordHash: String,
+        ageBracket: AgeBracket = AgeBracket.ADULT,
     ): UUID?
 
     fun findByHandle(handle: String): AccountRecord?

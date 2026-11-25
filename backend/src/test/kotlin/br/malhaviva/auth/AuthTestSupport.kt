@@ -47,11 +47,12 @@ class InMemoryAccountRepository : AccountRepository {
     override fun create(
         handle: String,
         passwordHash: String,
+        ageBracket: AgeBracket,
     ): UUID? =
         if (rows.values.any { it.handle.equals(handle, ignoreCase = true) }) {
             null
         } else {
-            UUID.randomUUID().also { rows[it] = AccountRecord(it, handle, passwordHash) }
+            UUID.randomUUID().also { rows[it] = AccountRecord(it, handle, passwordHash, ageBracket = ageBracket) }
         }
 
     @Synchronized

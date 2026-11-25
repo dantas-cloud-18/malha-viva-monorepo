@@ -16,6 +16,8 @@ tags:
     description: Dados públicos da malha (estações, trechos).
   - name: auth
     description: Conta, login, MFA, tokens e dispositivos.
+  - name: privacy
+    description: LGPD - consentimentos, direitos do titular (art. 18), menores (art. 14, ECA Digital).
   - name: telemetry
     description: Ingestão anônima. Nunca recebe token de conta.
   - name: realtime
@@ -68,6 +70,14 @@ paths:
         alvo e por IP próprios, separados da cota reservada à recuperação. Senha: NIST SP 800-63B (8 a 128
         caracteres, Unicode NFKC, sem regras de composição; recusa senhas vazadas e fracas).
         Corpo JSON de até 8 KiB (413 acima disso).
+
+        Portão de idade (Fase 5, LGPD art. 14 e ECA Digital, Lei 15.211/2025; proposta autodeclarada):
+        `birth_date` é obrigatório (400 `birth_date_required` / `invalid_birth_date`); o servidor deriva a faixa
+        `under_12`, `teen_12_17` ou `adult` e descarta a data. Menor de 12: exige `guardian` (400
+        `guardian_contact_required`; não pode ser o próprio contato da conta); a conta nasce `pending_parental_consent`,
+        um OTP vai ao contato do responsável e o login responde 403 `parental_consent_pending` até
+        `/auth/parental-consent/confirm`. 12 a 17: conta ativa com padrões protetivos (nenhum consentimento
+        começa concedido, `marketing` proibido, sem perfilamento). Adulto: sem restrições.
       requestBody:
         required: true
         content:
@@ -134,7 +144,7 @@ paths:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
         "403":
-          description: CAPTCHA exigido (ou inválido) após falhas repetidas.
+          description: CAPTCHA exigido (ou inválido) após falhas repetidas, ou conta de menor aguardando consentimento parental (`parental_consent_pending`, só depois da senha correta).
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
@@ -753,6 +763,244 @@ paths:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
 
+  # ---- Fase 5: LGPD e menores ------------------------------------------------------------------------------------
+  /auth/parental-consent/confirm:
+    post:
+      tags: [privacy]
+      operationId: confirmParentalConsent
+      summary: Confirmar o consentimento parental (conta de menor de 12 anos)
+      security: []
+      description: >
+        Passo final do fluxo parental: o responsável recebeu um OTP no contato informado no cadastro e o informa
+        (no aparelho da criança ou repassando o código). Com o OTP correto a conta passa de `pending_parental_consent`
+        a `active` e o consentimento parental fica registrado (contato do responsável, versão da política, data).
+        Resposta igual para handle inexistente, conta que não é pendente e código errado (400 `invalid_code`).
+        OTP de 6 dígitos, 10 min, uso único, 5 tentativas. Limite por IP.
+        Limite do método: prova controle do contato, não que quem o controla é o responsável legal
+        (verificação reforçada fica como evolução, a decidir no RIPD).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [handle, code]
+              properties:
+                handle: { $ref: "#/components/schemas/Handle" }
+                code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "204": { description: Consentimento parental confirmado; a conta já pode entrar. }
+        "400": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/parental-consent/resend:
+    post:
+      tags: [privacy]
+      operationId: resendParentalConsent
+      summary: Reenviar o OTP ao responsável
+      security: []
+      description: >
+        Sempre 202 com o mesmo corpo, exista ou não a conta pendente. Usa a cota de envio do cadastro e exige
+        `captcha_token` (403 `captcha_required`). Contas pendentes sem confirmação em 7 dias são apagadas pela
+        rotina de retenção.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [handle, captcha_token]
+              properties:
+                handle: { $ref: "#/components/schemas/Handle" }
+                captcha_token: { type: string }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "202":
+          description: Pedido aceito. Nada indica se a conta existe ou está pendente.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [accepted] }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403":
+          description: CAPTCHA ausente ou inválido (`captcha_required`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /me/consents:
+    get:
+      tags: [privacy]
+      operationId: listConsents
+      summary: Consentimentos vigentes
+      description: >
+        Um item por finalidade (`location`, `marketing`), sempre os dois, mesmo sem registro. Nada começa concedido
+        (opt-in explícito, art. 8º). O registro de consentimento vive em tabelas próprias e NUNCA é ligado a
+        posições ou telemetria: a ingestão é anônima e não consulta conta nem consentimento. Revogar `location`
+        não afeta a conta (login, contatos, dispositivos continuam funcionando) nem o restante do app.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Estado atual de cada finalidade e a versão vigente da política.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConsentList" }
+        "401": { $ref: "#/components/responses/Problem" }
+
+  /me/consents/history:
+    get:
+      tags: [privacy]
+      operationId: consentHistory
+      summary: Histórico de consentimentos
+      description: Eventos de concessão e revogação, do mais recente ao mais antigo (apêndice somente; art. 18, VIII).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Histórico da própria conta.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ConsentEvent" }
+        "401": { $ref: "#/components/responses/Problem" }
+
+  /me/consents/{purpose}:
+    put:
+      tags: [privacy]
+      operationId: grantConsent
+      summary: Conceder (ou renovar) um consentimento
+      description: >
+        Idempotente: repetir com a mesma versão não gera novo evento. `policy_version` deve ser a vigente
+        (409 `policy_version_mismatch` se o app mostrou texto antigo). `marketing` é consentimento separado e
+        é proibido para menores de 18 anos (403 `marketing_forbidden_for_minors`). Sem perfilamento de
+        adolescentes: nenhuma finalidade os inclui.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ConsentPurpose"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [policy_version]
+              properties:
+                policy_version: { type: string, maxLength: 32 }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "200":
+          description: Consentimento vigente.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Consent" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+    delete:
+      tags: [privacy]
+      operationId: revokeConsent
+      summary: Revogar um consentimento
+      description: >
+        Idempotente (204 mesmo sem consentimento ativo). Revogar `location` apenas registra o evento; o app para de
+        coletar e enviar. O servidor não pode (nem deve) ligar a revogação à telemetria já anonimizada.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ConsentPurpose"
+      responses:
+        "204": { description: Consentimento revogado (ou já não havia). }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /me/export:
+    get:
+      tags: [privacy]
+      operationId: exportMyData
+      summary: Exportar todos os dados pessoais (LGPD art. 18, II e V)
+      description: >
+        JSON com tudo que o servidor guarda sobre a conta: cadastro, contatos, dispositivos e sessões, consentimentos
+        (vigentes e histórico), consentimento parental, trocas de contato abertas e registros de acesso (Marco
+        Civil). Nunca inclui hash de senha, segredo TOTP, códigos de backup nem OTPs. A telemetria é anônima
+        (sem vínculo com a conta) e portanto não faz parte do export. `Cache-Control: no-store`.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Dados da própria conta.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DataExport" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /me:
+    patch:
+      tags: [privacy]
+      operationId: correctMyData
+      summary: Corrigir dados (LGPD art. 18, III)
+      description: >
+        Hoje corrige o `handle` (único, 409 se indisponível). Telefone e e-mail são corrigidos em `/me/contacts`
+        (com OTP). A faixa etária não é autoatendimento (evita burlar o portão de idade): correção pelo canal do
+        Encarregado.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                handle: { $ref: "#/components/schemas/Handle" }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "200":
+          description: Conta atualizada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+    delete:
+      tags: [privacy]
+      operationId: deleteMyAccount
+      summary: Excluir a conta e os dados pessoais (LGPD art. 18, VI)
+      description: >
+        Exige a senha atual (ação irreversível; 403 `invalid_password`). Em uma transação: apaga sessões,
+        dispositivos, refresh tokens, OTPs, contatos, TOTP, códigos de backup, consentimentos, histórico e
+        consentimento parental; anonimiza a linha da conta (handle aleatório, sem hash de senha, contatos nulos).
+        Resta apenas um túmulo anônimo (id, datas) por 30 dias e os registros de acesso exigidos pelo Marco Civil
+        (art. 15, 6 meses), ambos apagados pela rotina de retenção. A telemetria já é anônima.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password]
+              properties:
+                current_password: { type: string, minLength: 1, maxLength: 128 }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "204": { description: Conta excluída; todos os tokens deixam de valer nas rotas sensíveis. }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -769,6 +1017,11 @@ components:
       description: Token anônimo de /telemetry/tokens. Nunca o token de conta.
 
   parameters:
+    ConsentPurpose:
+      in: path
+      name: purpose
+      required: true
+      schema: { $ref: "#/components/schemas/ConsentPurposeName" }
     Corridor:
       in: path
       name: corridor
@@ -809,10 +1062,12 @@ components:
 
     CreateAccountRequest:
       type: object
-      required: [handle, password]
+      required: [handle, password, birth_date]
       properties:
         handle: { $ref: "#/components/schemas/Handle" }
         password: { type: string, minLength: 8, maxLength: 128 }
+        birth_date: { type: string, format: date, description: "Autodeclarada; usada só para calcular a faixa etária e descartada (não é guardada)." }
+        guardian: { $ref: "#/components/schemas/Guardian" }
         phone: { type: string, pattern: "^\\+[1-9][0-9]{7,14}$", description: E.164. }
         email: { type: string, format: email, maxLength: 254 }
         captcha_token: { type: string, description: Exigido quando há telefone ou e-mail (o cadastro envia mensagem). }
@@ -833,6 +1088,8 @@ components:
       required: [handle, contacts_verified]
       properties:
         handle: { $ref: "#/components/schemas/Handle" }
+        age_bracket: { $ref: "#/components/schemas/AgeBracket" }
+        status: { $ref: "#/components/schemas/AccountStatus" }
         contacts_verified:
           type: object
           required: [phone, email]
@@ -1034,3 +1291,113 @@ components:
         title: { type: string }
         status: { type: integer }
         detail: { type: string }
+
+    AgeBracket:
+      type: string
+      enum: [under_12, teen_12_17, adult]
+      description: >
+        Faixa etária autodeclarada no cadastro. O servidor calcula a faixa a partir de `birth_date` e NÃO guarda a
+        data de nascimento (minimização). Autodeclaração não é verificação; é o portão mínimo desta fase.
+    AccountStatus:
+      type: string
+      enum: [active, pending_parental_consent]
+    Guardian:
+      type: object
+      required: [channel, value]
+      description: Contato do responsável. Obrigatório para menores de 12 anos; nunca é contato de recuperação da conta.
+      properties:
+        channel: { $ref: "#/components/schemas/ContactChannel" }
+        value: { type: string, maxLength: 254 }
+    ConsentPurposeName:
+      type: string
+      enum: [location, marketing]
+    Consent:
+      type: object
+      required: [purpose, granted, current_policy_version]
+      properties:
+        purpose: { $ref: "#/components/schemas/ConsentPurposeName" }
+        granted: { type: boolean }
+        policy_version: { type: string, description: Versão da política aceita (ausente se nunca concedido). }
+        granted_at: { type: string, format: date-time }
+        revoked_at: { type: string, format: date-time }
+        current_policy_version: { type: string }
+        needs_reconsent:
+          type: boolean
+          description: Concedido numa versão diferente da vigente; o app deve pedir de novo.
+    ConsentList:
+      type: object
+      required: [policy_version, consents]
+      properties:
+        policy_version: { type: string }
+        consents:
+          type: array
+          items: { $ref: "#/components/schemas/Consent" }
+    ConsentEvent:
+      type: object
+      required: [purpose, action, policy_version, occurred_at]
+      properties:
+        purpose: { $ref: "#/components/schemas/ConsentPurposeName" }
+        action: { type: string, enum: [granted, revoked] }
+        policy_version: { type: string }
+        occurred_at: { type: string, format: date-time }
+    DataExport:
+      type: object
+      required: [generated_at, account, contacts, devices, consents, consent_history, access_logs]
+      properties:
+        generated_at: { type: string, format: date-time }
+        account:
+          type: object
+          required: [account_id, handle, created_at, age_bracket, status, totp_enabled]
+          properties:
+            account_id: { type: string, format: uuid }
+            handle: { $ref: "#/components/schemas/Handle" }
+            created_at: { type: string, format: date-time }
+            age_bracket: { $ref: "#/components/schemas/AgeBracket" }
+            status: { $ref: "#/components/schemas/AccountStatus" }
+            totp_enabled: { type: boolean }
+        contacts:
+          type: object
+          properties:
+            phone: { type: [string, "null"] }
+            phone_verified_at: { type: [string, "null"], format: date-time }
+            email: { type: [string, "null"] }
+            email_verified_at: { type: [string, "null"], format: date-time }
+            pending_changes:
+              type: array
+              items:
+                type: object
+                properties:
+                  channel: { $ref: "#/components/schemas/ContactChannel" }
+                  new_value: { type: string }
+                  effective_at: { type: string, format: date-time }
+        devices:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              label: { type: string }
+              created_at: { type: string, format: date-time }
+              last_used_at: { type: string, format: date-time }
+              revoked_at: { type: [string, "null"], format: date-time }
+        consents:
+          type: array
+          items: { $ref: "#/components/schemas/Consent" }
+        consent_history:
+          type: array
+          items: { $ref: "#/components/schemas/ConsentEvent" }
+        parental_consent:
+          type: [object, "null"]
+          properties:
+            guardian_channel: { $ref: "#/components/schemas/ContactChannel" }
+            guardian_contact: { type: string }
+            requested_at: { type: string, format: date-time }
+            verified_at: { type: [string, "null"], format: date-time }
+        access_logs:
+          type: array
+          items:
+            type: object
+            properties:
+              event: { type: string }
+              ip: { type: string }
+              occurred_at: { type: string, format: date-time }

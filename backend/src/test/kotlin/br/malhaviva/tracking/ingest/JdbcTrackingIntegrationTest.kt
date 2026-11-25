@@ -113,9 +113,9 @@ class JdbcTrackingIntegrationTest : PostgresIntegrationTest() {
     }
 
     @Test
-    fun `all migrations V1 to V9 applied cleanly and the backup code table exists`() {
+    fun `all migrations V1 to V10 applied cleanly and the backup code table exists`() {
         val versions = scalars("SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank")
-        assertEquals((1..9).map { it.toString() }, versions.filterNotNull().map { it.toString() })
+        assertEquals((1..10).map { it.toString() }, versions.filterNotNull().map { it.toString() })
         assertEquals(0L, scalars("SELECT count(*) FROM flyway_schema_history WHERE NOT success").single())
         val columns =
             scalars("SELECT column_name FROM information_schema.columns WHERE table_name = 'totp_backup_codes'")

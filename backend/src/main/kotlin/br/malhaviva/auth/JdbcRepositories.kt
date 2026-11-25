@@ -7,11 +7,19 @@ import java.util.UUID
 import javax.sql.DataSource
 
 private const val INSERT_ACCOUNT =
-    "INSERT INTO accounts (handle, password_hash) VALUES (?, ?) ON CONFLICT DO NOTHING RETURNING account_id"
-private const val ACCOUNT_COLUMNS = "account_id, handle, password_hash, role"
+    "INSERT INTO accounts (handle, password_hash, age_bracket, status) VALUES (?, ?, ?, ?) " +
+        "ON CONFLICT DO NOTHING RETURNING account_id"
+private const val ACCOUNT_COLUMNS = "account_id, handle, password_hash, role, age_bracket, status"
 
 private fun ResultSet.toAccount() =
-    AccountRecord(uuid("account_id"), getString("handle"), getString("password_hash"), getString("role"))
+    AccountRecord(
+        uuid("account_id"),
+        getString("handle"),
+        getString("password_hash"),
+        getString("role"),
+        AgeBracket.fromWire(getString("age_bracket")),
+        AccountStatus.fromWire(getString("status")),
+    )
 
 class JdbcAccountRepository(
     private val dataSource: DataSource,
@@ -19,15 +27,25 @@ class JdbcAccountRepository(
     override fun create(
         handle: String,
         passwordHash: String,
-    ): UUID? =
-        dataSource
-            .read { it.queryList(INSERT_ACCOUNT, handle, passwordHash) { rs -> rs.uuid("account_id") } }
-            .firstOrNull()
+        ageBracket: AgeBracket,
+    ): UUID? {
+        val status =
+            if (ageBracket == AgeBracket.UNDER_12) AccountStatus.PENDING_PARENTAL_CONSENT else AccountStatus.ACTIVE
+        return dataSource
+            .read {
+                it.queryList(INSERT_ACCOUNT, handle, passwordHash, ageBracket.wire, status.wire) { rs ->
+                    rs.uuid("account_id")
+                }
+            }.firstOrNull()
+    }
 
     override fun findByHandle(handle: String): AccountRecord? =
         dataSource
             .read {
-                it.queryList("SELECT $ACCOUNT_COLUMNS FROM accounts WHERE lower(handle) = lower(?)", handle) { rs ->
+                it.queryList(
+                    "SELECT $ACCOUNT_COLUMNS FROM accounts WHERE lower(handle) = lower(?) AND status <> 'deleted'",
+                    handle,
+                ) { rs ->
                     rs.toAccount()
                 }
             }.firstOrNull()
@@ -35,7 +53,10 @@ class JdbcAccountRepository(
     override fun findById(id: UUID): AccountRecord? =
         dataSource
             .read {
-                it.queryList("SELECT $ACCOUNT_COLUMNS FROM accounts WHERE account_id = ?", id) { rs -> rs.toAccount() }
+                it.queryList(
+                    "SELECT $ACCOUNT_COLUMNS FROM accounts WHERE account_id = ? AND status <> 'deleted'",
+                    id,
+                ) { rs -> rs.toAccount() }
             }.firstOrNull()
 
     override fun updatePasswordHash(

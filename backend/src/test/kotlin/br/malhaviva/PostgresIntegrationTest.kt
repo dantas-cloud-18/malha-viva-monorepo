@@ -10,7 +10,7 @@ import java.util.concurrent.Executors
 import javax.sql.DataSource
 import kotlin.test.BeforeTest
 
-/** Um unico PostGIS 17 por JVM de teste, com V1 a V9 aplicadas uma vez (o Testcontainers o derruba no fim). */
+/** Um unico PostGIS 17 por JVM de teste, com V1 a V10 aplicadas uma vez (o Testcontainers o derruba no fim). */
 private object SharedPostgres {
     private val image = DockerImageName.parse("postgis/postgis:17-3.5").asCompatibleSubstituteFor("postgres")
     private val container = PostgreSQLContainer(image).also { it.start() }
@@ -29,7 +29,8 @@ abstract class PostgresIntegrationTest {
         ds.connection.use { c ->
             c.createStatement().use {
                 it.execute(
-                    "TRUNCATE accounts, corridors, telemetry_points, telemetry_nonces, train_events, holidays CASCADE",
+                    "TRUNCATE accounts, access_logs, corridors, telemetry_points, telemetry_nonces, " +
+                        "train_events, holidays CASCADE",
                 )
             }
         }

@@ -25,7 +25,7 @@ fun otpKeyFromEnv(env: (String) -> String? = System::getenv): ByteArray {
     return bytes
 }
 
-enum class OtpPurpose { VERIFY_CONTACT, RECOVERY, CONTACT_CHANGE }
+enum class OtpPurpose { VERIFY_CONTACT, RECOVERY, CONTACT_CHANGE, PARENTAL_CONSENT }
 
 data class OtpRecord(
     val id: UUID,

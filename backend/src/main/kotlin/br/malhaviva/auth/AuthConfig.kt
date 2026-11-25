@@ -4,14 +4,27 @@ import br.malhaviva.auth.recovery.BackupCodeService
 import br.malhaviva.auth.recovery.ContactSecurityNotifier
 import br.malhaviva.auth.recovery.JdbcBackupCodeRepository
 import br.malhaviva.auth.recovery.JdbcContactRepository
+import br.malhaviva.auth.recovery.JdbcOtpRepository
 import br.malhaviva.auth.recovery.JdbcTotpRepository
+import br.malhaviva.auth.recovery.OtpService
 import br.malhaviva.auth.recovery.RecoveryConfig
 import br.malhaviva.auth.recovery.TotpService
 import br.malhaviva.auth.recovery.otpKeyFromEnv
+import br.malhaviva.lgpd.AccessLogRepository
+import br.malhaviva.lgpd.ConsentService
+import br.malhaviva.lgpd.DataRightsService
+import br.malhaviva.lgpd.JdbcConsentRepository
+import br.malhaviva.lgpd.JdbcParentalConsentRepository
+import br.malhaviva.lgpd.LgpdComponents
+import br.malhaviva.lgpd.ParentalConsentService
 import org.slf4j.LoggerFactory
 import javax.sql.DataSource
 
 private val log = LoggerFactory.getLogger("br.malhaviva.auth.AuthConfig")
+
+/** Versao vigente da politica de privacidade/termos que o titular aceita (consentimento versionado). */
+const val POLICY_VERSION_ENV = "MALHAVIVA_POLICY_VERSION"
+private const val DEFAULT_POLICY_VERSION = "2026-11-25"
 
 /** `true` libera o [NoopCaptchaVerifier] (aceita qualquer token). Somente desenvolvimento. */
 const val DEV_CAPTCHA_ENV = "MALHAVIVA_DEV_CAPTCHA"
@@ -53,7 +66,18 @@ object AuthConfig {
         val gateway = RecoveryConfig.gatewayFromEnv(env)
         val notifier = ContactSecurityNotifier(contacts, gateway, RecoveryConfig.backgroundLauncher())
         val mfa = MfaService(accounts, totp, backup, notifier, hasher, access)
-        val auth = AuthService(accounts, sessions, policy, hasher, LoginGuard(), verifier, mfa)
+        val accessLogs = AccessLogRepository(dataSource)
+        val auth =
+            AuthService(
+                accounts,
+                sessions,
+                policy,
+                hasher,
+                LoginGuard(),
+                verifier,
+                mfa,
+                onLogin = { id, ip -> accessLogs.record(id, "login", ip) },
+            )
         val recovery =
             RecoveryConfig.build(
                 dataSource,
@@ -66,6 +90,23 @@ object AuthConfig {
                 hasher,
                 verifier,
             )
-        return AuthComponents(auth, sessions, access, recovery = recovery)
+        val policyVersion = env(POLICY_VERSION_ENV)?.takeIf { it.isNotBlank() } ?: DEFAULT_POLICY_VERSION
+        val consents = ConsentService(JdbcConsentRepository(dataSource), accounts, policyVersion)
+        val lgpd =
+            LgpdComponents(
+                consents,
+                DataRightsService(dataSource, accounts, hasher, consents),
+                ParentalConsentService(
+                    accounts,
+                    JdbcParentalConsentRepository(dataSource),
+                    OtpService(JdbcOtpRepository(dataSource), otpKey),
+                    gateway,
+                    policyVersion,
+                ),
+                accessLogs,
+                accounts,
+                contacts,
+            )
+        return AuthComponents(auth, sessions, access, recovery = recovery, lgpd = lgpd)
     }
 }

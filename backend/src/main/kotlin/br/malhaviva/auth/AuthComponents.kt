@@ -1,6 +1,7 @@
 package br.malhaviva.auth
 
 import br.malhaviva.auth.recovery.RecoveryComponents
+import br.malhaviva.lgpd.LgpdComponents
 import br.malhaviva.tracking.ingest.RateLimiter
 
 private const val IP_CAPACITY = 20.0
@@ -17,7 +18,11 @@ class AuthLimiters(
     val signup: RateLimiter = RateLimiter(SIGNUP_CAPACITY, SIGNUP_REFILL_PER_S),
 )
 
-/** Tudo que as rotas de conta precisam; montado em AuthConfig (producao) ou nos testes. */
+/**
+ * Tudo que as rotas de conta precisam; montado em AuthConfig (producao) ou nos testes.
+ * Suppress: injecao dos planos de conta; agrupar so deslocaria os parametros.
+ */
+@Suppress("LongParameterList")
 class AuthComponents(
     val auth: AuthService,
     val sessions: SessionService,
@@ -26,4 +31,6 @@ class AuthComponents(
     val clock: () -> Long = System::currentTimeMillis,
     /** Recuperacao e contatos; null = desligada (rotas nao registradas). */
     val recovery: RecoveryComponents? = null,
+    /** LGPD (idade, consentimento, direitos do titular); null = desligada (cadastro sem portao de idade). */
+    val lgpd: LgpdComponents? = null,
 )

@@ -1,6 +1,7 @@
 package br.malhaviva.auth
 
 import org.slf4j.LoggerFactory
+import java.util.UUID
 
 private val HANDLE_REGEX = Regex("^@[a-zA-Z0-9_]{3,20}$")
 private val log = LoggerFactory.getLogger("br.malhaviva.auth.AuthService")
@@ -39,6 +40,9 @@ sealed interface LoginResult {
         val mfaToken: String,
     ) : LoginResult
 
+    /** Senha certa, mas conta pendente de consentimento parental (LGPD art. 14): sem sessao nem MFA. */
+    data object ParentalConsentPending : LoginResult
+
     /** Admin sem TOTP: so o access restrito de enrolamento. */
     data class MfaEnrollmentRequired(
         val accessToken: String,
@@ -61,6 +65,8 @@ class AuthService(
     private val guard: LoginGuard,
     private val captcha: CaptchaVerifier,
     val mfa: MfaService,
+    /** Chamado a cada login concluido (conta, IP); alimenta o registro de acesso do Marco Civil. */
+    private val onLogin: (UUID, String) -> Unit = { _, _ -> },
 ) {
     /** Hash descartavel: igualar o tempo quando o handle nao existe (sem revelar existencia). */
     private val dummyHash: String by lazy { hasher.hash("dummy-password-for-timing") }
@@ -68,6 +74,7 @@ class AuthService(
     suspend fun register(
         handle: String,
         password: String,
+        ageBracket: AgeBracket = AgeBracket.ADULT,
     ): RegisterResult =
         if (!isValidHandle(handle)) {
             RegisterResult.InvalidHandle
@@ -75,7 +82,7 @@ class AuthService(
             when (val checked = policy.check(password, listOf(handle.removePrefix("@")))) {
                 is PolicyResult.Rejected -> RegisterResult.PasswordRejected(checked.reason)
                 is PolicyResult.Accepted ->
-                    if (accounts.create(handle, hasher.hash(checked.normalized)) != null) {
+                    if (accounts.create(handle, hasher.hash(checked.normalized), ageBracket) != null) {
                         RegisterResult.Created
                     } else {
                         RegisterResult.HandleTaken
@@ -120,7 +127,13 @@ class AuthService(
         val ok = hasher.verify(password, account?.passwordHash ?: dummyHash) && account != null
         return if (ok && account != null) {
             upgradeHashIfNeeded(account, password)
-            afterPassword(ip, key, account, deviceLabel)
+            if (account.status == AccountStatus.ACTIVE) {
+                afterPassword(ip, key, account, deviceLabel)
+            } else {
+                // senha certa nao e abuso; sem sessao enquanto o responsavel nao confirmar
+                guard.recordSuccess(ip, key)
+                LoginResult.ParentalConsentPending
+            }
         } else {
             guard.recordFailure(ip, key)
             LoginResult.InvalidCredentials
@@ -142,7 +155,7 @@ class AuthService(
             }
             MfaGate.NONE -> {
                 guard.recordSuccess(ip, key)
-                LoginResult.Success(sessions.startSession(account.id, deviceLabel))
+                LoginResult.Success(sessions.startSession(account.id, deviceLabel).also { logAccess(account.id, ip) })
             }
         }
 
@@ -175,7 +188,11 @@ class AuthService(
             when (val r = mfa.redeem(mfaToken, code, factor)) {
                 is MfaRedeem.Ok -> {
                     guard.recordSuccess(ip, key)
-                    LoginResult.Success(sessions.startSession(r.challenge.accountId, r.challenge.deviceLabel, true))
+                    LoginResult.Success(
+                        sessions.startSession(r.challenge.accountId, r.challenge.deviceLabel, true).also {
+                            logAccess(r.challenge.accountId, ip)
+                        },
+                    )
                 }
                 MfaRedeem.Wrong -> {
                     guard.recordFailure(ip, key)
@@ -184,6 +201,19 @@ class AuthService(
                 MfaRedeem.Unknown -> LoginResult.InvalidMfa
             }
         }
+    }
+
+    /** Falha do registro de acesso nunca derruba o login; so o tipo da excecao vai ao log. */
+    private fun logAccess(
+        accountId: UUID,
+        ip: String,
+    ) {
+        runCatching {
+            onLogin(
+                accountId,
+                ip,
+            )
+        }.onFailure { log.error("Registro de acesso falhou: {}", it.javaClass.simpleName) }
     }
 
     private fun upgradeHashIfNeeded(
