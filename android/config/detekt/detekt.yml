@@ -1,0 +1,8 @@
+style:
+  MagicNumber:
+    ignorePropertyDeclaration: true
+naming:
+  FunctionNaming:
+    ignoreAnnotated: ['Composable']
+  MatchingDeclarationName:
+    active: false

@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="36dp"
+    android:height="36dp"
+    android:viewportWidth="36"
+    android:viewportHeight="36">
+    <!-- Trem urbano visto de frente: carroceria, para-brisa (vazado), faroletes e rodeiros. -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M10,3h16a4,4 0 0,1 4,4v18a3,3 0 0,1 -3,3h-18a3,3 0 0,1 -3,-3v-18a4,4 0 0,1 4,-4zM11.5,7h13a1.5,1.5 0 0,1 1.5,1.5v7a1.5,1.5 0 0,1 -1.5,1.5h-13a1.5,1.5 0 0,1 -1.5,-1.5v-7a1.5,1.5 0 0,1 1.5,-1.5zM12,21.5a1.75,1.75 0 1,0 0.01,0zM24,21.5a1.75,1.75 0 1,0 0.01,0z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M9,28l-2.5,5h3l2.5,-5zM27,28l2.5,5h-3l-2.5,-5zM14,31h8v2h-8z" />
+</vector>

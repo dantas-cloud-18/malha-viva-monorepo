@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+# Ative com: git config core.hooksPath .githooks
+set -eu
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+sh scripts/check-env-example.sh
+staged=$(git diff --cached --name-only)
+for module in backend android; do
+  if printf '%s\n' "$staged" | grep -q "^$module/.*\.\(kt\|kts\)$"; then
+    (cd "$module" && ./gradlew ktlintCheck detekt --quiet)
+  fi
+done

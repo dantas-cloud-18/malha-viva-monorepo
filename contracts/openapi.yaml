@@ -1,0 +1,1605 @@
+openapi: 3.1.0
+info:
+  title: Malha Viva API
+  version: 0.1.0
+  description: >
+    Contrato da V1 (Ramal Santa Cruz). Dois planos separados: conta (identificada por @handle)
+    e telemetria (anônima, sem vínculo com a conta).
+servers:
+  - url: https://api.malhaviva.example/v1
+    description: Placeholder até a definição do domínio.
+
+tags:
+  - name: health
+    description: Verificação de saúde do serviço.
+  - name: network
+    description: Dados públicos da malha (estações, trechos).
+  - name: auth
+    description: Conta, login, MFA, tokens e dispositivos.
+  - name: privacy
+    description: LGPD - consentimentos, direitos do titular (art. 18), menores (art. 14, ECA Digital).
+  - name: telemetry
+    description: Ingestão anônima. Nunca recebe token de conta.
+  - name: realtime
+    description: Fluxos em tempo real (SSE).
+
+paths:
+  /health:
+    get:
+      tags: [health]
+      operationId: health
+      summary: Saúde do serviço
+      security: []
+      responses:
+        "200":
+          description: Serviço no ar.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [ok] }
+
+  /network/corridors/{corridor}:
+    get:
+      tags: [network]
+      operationId: getCorridor
+      summary: Malha do corredor
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/Corridor"
+      responses:
+        "200":
+          description: Estações e trechos do corredor, com geometria em GeoJSON.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CorridorNetwork" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /auth/accounts:
+    post:
+      tags: [auth]
+      operationId: createAccount
+      summary: Criar conta
+      security: []
+      description: >
+        Cria a conta. O @handle é público; telefone e e-mail são opcionais, ficam sem verificação até confirmar o OTP do cadastro,
+        só servem para recuperação e nunca são devolvidos a terceiros. Com telefone ou e-mail o cadastro envia
+        SMS/e-mail, então exige `captcha_token` válido (403 `captcha_required`) e usa cota, limite por DDI, por
+        alvo e por IP próprios, separados da cota reservada à recuperação. Senha: NIST SP 800-63B (8 a 128
+        caracteres, Unicode NFKC, sem regras de composição; recusa senhas vazadas e fracas).
+        Corpo JSON de até 8 KiB (413 acima disso).
+
+        Portão de idade (Fase 5, LGPD art. 14 e ECA Digital, Lei 15.211/2025; proposta autodeclarada):
+        `birth_date` é obrigatório (400 `birth_date_required` / `invalid_birth_date`); o servidor deriva a faixa
+        `under_12`, `teen_12_17` ou `adult` e descarta a data. Menor de 12: exige `guardian` (400
+        `guardian_contact_required`; não pode ser o próprio contato da conta); a conta nasce `pending_parental_consent`,
+        um OTP vai ao contato do responsável e o login responde 403 `parental_consent_pending` até
+        `/auth/parental-consent/confirm`. 12 a 17: conta ativa com padrões protetivos (nenhum consentimento
+        começa concedido, `marketing` proibido, sem perfilamento). Adulto: sem restrições.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAccountRequest" }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "201":
+          description: Conta criada; contatos pendentes de verificação.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403":
+          description: CAPTCHA ausente ou inválido num cadastro com telefone ou e-mail (`captcha_required`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "409":
+          description: Handle indisponível. Nunca informa se telefone ou e-mail já existem.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+
+  /auth/token:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Entrar
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [handle, password]
+              properties:
+                handle: { $ref: "#/components/schemas/Handle" }
+                password: { type: string, minLength: 8, maxLength: 128 }
+                device_label: { $ref: "#/components/schemas/DeviceLabel" }
+                captcha_token: { type: string, description: Exigido após 5 falhas por handle ou IP. }
+      description: >
+        Senha correta nem sempre devolve tokens. Conta com TOTP ativo (opcional para `user`, obrigatório para `admin`)
+        recebe `MfaChallenge` e conclui em `/auth/login/mfa`. Admin ainda sem TOTP recebe `MfaEnrollmentRequired`:
+        um access token restrito (`scope: mfa_enroll_only`, sem refresh) que só serve para `/me/mfa/totp` e
+        `/me/mfa/totp/confirm`; todas as outras rotas protegidas o recusam com 401. Depois de confirmar, entrar de novo.
+        A recuperação de senha não remove o TOTP: depois do reset, o login continua pedindo o código.
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "200":
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/TokenPair"
+                  - $ref: "#/components/schemas/MfaChallenge"
+                  - $ref: "#/components/schemas/MfaEnrollmentRequired"
+          description: Tokens emitidos, segundo fator exigido ou enrolamento de TOTP exigido (admin).
+        "401":
+          description: Mesmo corpo para handle inexistente e senha errada.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "403":
+          description: CAPTCHA exigido (ou inválido) após falhas repetidas, ou conta de menor aguardando consentimento parental (`parental_consent_pending`, só depois da senha correta).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/login/mfa:
+    post:
+      tags: [auth]
+      operationId: loginMfa
+      summary: Concluir o login com o código TOTP ou um código de recuperação
+      security: []
+      description: >
+        `mfa_token` vale 5 min, é de uso único e fica só como SHA-256 em memória. Até 5 códigos errados por token;
+        cada erro conta no atraso progressivo do login (handle e IP). O mesmo passo de 30 s nunca é aceito duas vezes.
+        Envie exatamente um entre `code` (TOTP) e `backup_code` (código de recuperação de uso único, entregue ao
+        ligar o TOTP); os dois juntos, ou nenhum, dão 400. Código de recuperação errado conta na mesma trava de TOTP
+        por conta (10 erros, 15 min) e, ao ser usado, os canais verificados são avisados. Vale também para `admin`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mfa_token]
+              oneOf:
+                - required: [code]
+                - required: [backup_code]
+              properties:
+                mfa_token: { type: string }
+                code: { type: string, pattern: "^[0-9]{6}$" }
+                backup_code: { $ref: "#/components/schemas/BackupCode" }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+          description: Tokens emitidos; o access token traz `amr` com `otp`.
+        "400": { $ref: "#/components/responses/Problem" }
+        "401":
+          description: Código errado ou reusado, ou `mfa_token` vencido, usado ou desconhecido (`invalid_mfa`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /me/mfa/totp:
+    post:
+      tags: [auth]
+      operationId: startTotpEnrollment
+      summary: Iniciar o enrolamento de TOTP
+      description: >
+        Gera um segredo novo (cifrado em repouso) e o devolve uma única vez. Aceita o token restrito
+        `mfa_enroll_only`. O 2FA só liga após `/me/mfa/totp/confirm`. O primeiro enrolamento de uma conta
+        `admin` exige `enrollment_code`, código de uso único entregue fora de banda (gravado como hash na
+        mesma operação manual que promove a conta); só a senha nunca basta. Sem o código válido: 403
+        `enrollment_code_required`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enrollment_code: { type: string, maxLength: 128, description: Só para admin sem TOTP. }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "201":
+          description: Segredo gerado; ainda inativo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TotpEnrollment" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403":
+          description: Admin sem o código de enrolamento válido (`enrollment_code_required`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /me/mfa/totp/confirm:
+    post:
+      tags: [auth]
+      operationId: confirmTotpEnrollment
+      summary: Confirmar o TOTP com um código válido
+      description: >
+        Liga o 2FA. Aceita o token restrito `mfa_enroll_only`; depois é preciso entrar de novo. A resposta traz os 10
+        códigos de recuperação, **só desta vez** (no servidor fica apenas o HMAC de cada um).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "200":
+          description: 2FA ativo; códigos de recuperação em claro, mostrados uma única vez.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BackupCodes" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /me/mfa/totp/backup-codes:
+    post:
+      tags: [auth]
+      operationId: regenerateBackupCodes
+      summary: Regenerar os códigos de recuperação do TOTP
+      description: >
+        Exige a senha atual **e** um segundo fator: `code` (TOTP atual) ou `backup_code` (um código de recuperação
+        ainda válido, que é consumido); exatamente um dos dois, senão 400. Apaga o lote antigo (os códigos antigos
+        deixam de valer) e devolve 10 novos, só desta vez. Erro conta na trava de TOTP por conta. Avisa os canais
+        verificados. Não aceita o token restrito `mfa_enroll_only`. `admin` segue as mesmas regras.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              oneOf:
+                - required: [code]
+                - required: [backup_code]
+              properties:
+                password: { type: string }
+                code: { type: string, pattern: "^[0-9]{6}$" }
+                backup_code: { $ref: "#/components/schemas/BackupCode" }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "200":
+          description: Novo lote de códigos de recuperação.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BackupCodes" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403":
+          description: Senha ou segundo fator errado (`invalid_credentials`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /me/mfa/totp/disable:
+    post:
+      tags: [auth]
+      operationId: disableTotp
+      summary: Desligar o TOTP
+      description: Exige senha atual e código TOTP atual. Conta `admin` não pode desligar (403 `admin_mfa_mandatory`).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password, code]
+              properties:
+                password: { type: string }
+                code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "204": { description: 2FA desligado; segredo apagado. }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403":
+          description: Senha ou código errado (`invalid_credentials`) ou conta admin (`admin_mfa_mandatory`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /admin/ping:
+    get:
+      tags: [auth]
+      operationId: adminPing
+      summary: Verificação de acesso admin
+      description: Exige papel `admin` e access token com `amr` contendo `otp`. Senão 403 `admin_mfa_required`.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Acesso admin confirmado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [ok] }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refresh
+      summary: Renovar tokens
+      security: []
+      description: Refresh rotativo. Reuso de um refresh antigo revoga toda a família de tokens.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+          description: Novo par de tokens.
+        "401": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Encerrar a sessão deste dispositivo
+      description: Revoga a família do refresh token enviado. Idempotente; sempre 204.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "204": { description: Sessão encerrada. }
+
+  /me/devices:
+    get:
+      tags: [auth]
+      operationId: listDevices
+      summary: Dispositivos conectados
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Dispositivos da própria conta.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Device" }
+        "401": { $ref: "#/components/responses/Problem" }
+
+  /me/devices/{deviceId}:
+    delete:
+      tags: [auth]
+      operationId: revokeDevice
+      summary: Desconectar um dispositivo
+      description: Dispositivo de outra conta responde 404, igual a inexistente (sem IDOR).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: deviceId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Dispositivo revogado e refresh da família invalidado. }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /auth/recovery:
+    post:
+      tags: [auth]
+      operationId: requestRecovery
+      summary: Pedir recuperação de conta
+      security: []
+      description: >
+        Sempre responde 202 com o mesmo corpo, exista ou não a conta, tenha ou não canal verificado
+        (mesmo status, corpo e classe de tempo). Se a conta existir, envia um OTP a cada canal verificado e
+        avisa o outro canal. Com os dois canais verificados, a conclusão exige os dois OTPs (anti-SIM swap).
+        CAPTCHA é exigido após poucos pedidos por IP ou handle.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [handle]
+              properties:
+                handle: { $ref: "#/components/schemas/Handle" }
+                captcha_token: { type: string }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "202":
+          description: Pedido aceito. Nada indica se a conta existe.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [accepted] }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403":
+          description: CAPTCHA exigido (ou inválido). Depende só de IP e handle informados, nunca da conta.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/recovery/complete:
+    post:
+      tags: [auth]
+      operationId: completeRecovery
+      summary: Concluir recuperação com OTP e nova senha
+      security: []
+      description: >
+        OTP de 6 dígitos, válido por até 10 minutos, uso único, 5 tentativas. Exige o OTP de cada canal
+        verificado. A nova senha segue a mesma política do cadastro. Em caso de sucesso revoga todas as
+        sessões e famílias de refresh, cancela trocas de contato pendentes e notifica os canais.
+        Handle inexistente, OTP errado, expirado ou ausente respondem igual (400 invalid_or_expired_code).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [handle, new_password]
+              properties:
+                handle: { $ref: "#/components/schemas/Handle" }
+                phone_code: { type: string, pattern: "^[0-9]{6}$" }
+                email_code: { type: string, pattern: "^[0-9]{6}$" }
+                new_password: { type: string, minLength: 8, maxLength: 128 }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "204": { description: Senha trocada; todas as sessões revogadas. }
+        "400": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /me/contacts:
+    get:
+      tags: [auth]
+      operationId: getContacts
+      summary: Estado dos contatos de recuperação
+      description: Só flags e trocas pendentes. Telefone e e-mail nunca são devolvidos.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Estado dos contatos da própria conta.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContactsState" }
+        "401": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [auth]
+      operationId: setContact
+      summary: Cadastrar, verificar de novo ou trocar um contato
+      security:
+        - bearerAuth: []
+      description: >
+        Toda operação exige a senha atual (`current_password`): um access token roubado não basta para plantar
+        um canal de recuperação. Canal ainda não verificado: grava o valor e envia OTP ao canal (202, sem
+        `change_id`). Canal já verificado (troca): envia OTP ao NOVO canal, avisa o canal antigo e só aplica
+        após 24 h, prazo em que o titular pode cancelar (DELETE /me/contact-changes/{changeId}). Todo canal já
+        verificado é avisado em qualquer inclusão ou troca. Sessão revogada: 401 mesmo com o access ainda no prazo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetContactRequest" }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "202":
+          description: OTP enviado ao canal informado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContactChangeStarted" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403":
+          description: Senha atual incorreta ou ausente (`invalid_password`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /me/contacts/confirm:
+    post:
+      tags: [auth]
+      operationId: confirmContact
+      summary: Confirmar o OTP de um contato
+      security:
+        - bearerAuth: []
+      description: >
+        Sem `change_id` verifica o contato gravado e exige `current_password` (403 `invalid_password`). Com
+        `change_id` confirma o novo canal de uma troca, cuja senha já foi provada ao pedi-la; a troca só é
+        aplicada após as 24 h de espera.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfirmContactRequest" }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "204": { description: Confirmado. }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403":
+          description: Senha atual incorreta ou ausente ao verificar o contato gravado (`invalid_password`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /me/contact-changes/{changeId}:
+    delete:
+      tags: [auth]
+      operationId: cancelContactChange
+      summary: Cancelar uma troca de contato pendente
+      description: Troca de outra conta responde 404, igual a inexistente (sem IDOR).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: changeId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Troca cancelada; o canal antigo é avisado. }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /telemetry/tokens:
+    post:
+      tags: [telemetry]
+      operationId: issueTelemetryToken
+      summary: Emitir token anônimo
+      security: []
+      description: >
+        Emite token anônimo curto para uma viagem, só para cliente atestado
+        (Play Integrity ou App Attest). Não aceita nem grava token de conta.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [platform, integrity_token]
+              additionalProperties: false
+              properties:
+                platform: { type: string, enum: [android, ios] }
+                integrity_token:
+                  type: string
+                  description: Token do Play Integrity ou asserção do App Attest. Nunca é gravado nem devolvido.
+      responses:
+        "201":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TelemetryToken" }
+          description: Token anônimo emitido (válido por 6 horas).
+        "400":
+          description: Corpo malformado, acima de 4 KiB ou com plataforma desconhecida.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401":
+          description: Cliente não atestado.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /telemetry/batches:
+    post:
+      tags: [telemetry]
+      operationId: ingestBatch
+      summary: Enviar lote de telemetria
+      security:
+        - telemetryToken: []
+      description: >
+        Lote de amostras de um aparelho. O aparelho já descartou pontos fora do corredor e cortou
+        início e fim da viagem. Cadência: o app envia um lote a cada 5 s durante a viagem (cada lote traz as
+        amostras novas, em geral 2 ou 3); os últimos 300 m da viagem ficam retidos até o fim, por privacidade.
+        O servidor infere o sentido pelo avanço (50 m ou mais) entre a primeira e a última amostra do lote; com
+        menos avanço usa `bearing_deg` da última amostra (só se `speed_mps` for 1 m/s ou mais) e, sem rumo,
+        mantém o último sentido da época. Assinatura: HMAC-SHA256 sobre
+        "{X-Timestamp}\n{X-Nonce}\n{sha256(corpo)}" com a chave do token. sha256(corpo) é o hash dos bytes
+        do corpo em hexadecimal minúsculo; a assinatura é o HMAC em base64url sem padding ("=").
+        Timestamp com tolerância de 60 s; nonce de uso único. Assinatura inválida não consome o nonce.
+        O token vai em `Authorization: Bearer` e `anon_epoch_id` deve ser o do token (senão 400). Token
+        ausente, desconhecido ou expirado e assinatura inválida respondem 401. Corpo acima de 128 KiB, campo
+        desconhecido ou fora do esquema, e timestamp fora da tolerância respondem 400. Limite de taxa por
+        token e por IP responde 429.
+      parameters:
+        - in: header
+          name: X-Timestamp
+          required: true
+          schema: { type: integer, format: int64, description: Epoch em milissegundos. }
+        - in: header
+          name: X-Nonce
+          required: true
+          schema: { type: string, minLength: 16, maxLength: 64 }
+        - in: header
+          name: X-Signature
+          required: true
+          schema: { type: string, description: Base64url do HMAC. }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TelemetryBatch" }
+      responses:
+        "202":
+          description: Lote recebido. Amostras implausíveis são descartadas, com contagem por motivo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BatchResult" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409":
+          description: Nonce já usado (replay).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /realtime/tickets:
+    post:
+      tags: [realtime]
+      operationId: issueRealtimeTicket
+      summary: Emitir ticket do WebSocket
+      security: []
+      description: >
+        Ticket de uso único (30 s) para abrir o WebSocket sem token na URL. Leitura pública dos trens;
+        sem identidade. Contrato do canal em asyncapi.yaml.
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ticket, expires_at, url]
+                properties:
+                  ticket: { type: string }
+                  expires_at: { type: string, format: date-time }
+                  url: { type: string, format: uri }
+          description: Ticket emitido.
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /corridors/{corridor}/trains:
+    get:
+      tags: [realtime]
+      operationId: listTrains
+      summary: Trens do corredor (polling)
+      security: []
+      description: >
+        Snapshot dos trens estimados em um sentido. Fallback de polling para o stream SSE.
+        Nenhum campo identifica passageiro, dispositivo ou conta; os ids dos trens sao efemeros.
+        Limiar de publicacao: um trem so aparece quando ha pelo menos K viagens anonimas distintas (ids efemeros de
+        viagem, nao pontos) dentro da janela de 60 s. K padrao 1 (um trem pode ser a posicao anonima de uma unica
+        pessoa; ver RIPD R1/R2), configuravel no servidor (minimo 1). Abaixo de K a lista vem sem o trem.
+        Cada posicao e projetada para o instante da consulta (velocidade x idade). Cada trem traz situacao,
+        estacao de referencia e ETA por estacao a frente.
+      parameters:
+        - $ref: "#/components/parameters/Corridor"
+        - in: query
+          name: direction
+          required: true
+          schema: { $ref: "#/components/schemas/Direction" }
+      responses:
+        "200":
+          description: Trens atuais (posicoes com mais de 60 s ja foram descartadas).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrainsSnapshot" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /corridors/{corridor}/trains/stream:
+    get:
+      tags: [realtime]
+      operationId: streamTrains
+      summary: Trens do corredor (SSE)
+      security: []
+      description: >
+        Server-Sent Events. Cada evento `train` traz o JSON de um TrainState atualizado. Mesmo limiar de publicacao do
+        polling: so sao enviados trens com pelo menos K viagens anonimas distintas na janela de 60 s (padrao 1).
+        Comentario de heartbeat a cada 15 s. Há teto de conexões abertas, global e por IP: acima dele a
+        conexão não abre (503 com `Retry-After`).
+      parameters:
+        - $ref: "#/components/parameters/Corridor"
+        - in: query
+          name: direction
+          required: true
+          schema: { $ref: "#/components/schemas/Direction" }
+      responses:
+        "200":
+          description: "Fluxo `text/event-stream`; `event: train`, `data` = TrainState."
+          content:
+            text/event-stream:
+              schema: { $ref: "#/components/schemas/TrainState" }
+        "503":
+          description: Teto de conexões SSE atingido (global ou do IP).
+          headers:
+            Retry-After:
+              schema: { type: integer }
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+
+  /corridors/{corridor}/stations/crowding:
+    get:
+      tags: [realtime]
+      operationId: listStationCrowding
+      summary: Lotação das estações (polling)
+      security: []
+      description: >
+        Nível grosso de lotação de cada estação do corredor em um sentido, derivado de viagens anônimas paradas na
+        estação (velocidade até 1 m/s e até 100 m da estação ao longo da via) na janela de 30 s. Cada viagem conta
+        uma vez, por id efêmero. k-anonimato (RIPD R3): o nível só é publicado quando há pelo menos K viagens
+        anônimas distintas; abaixo disso `level` vem `null` ("sem dados de lotação"). K padrão 5, configurável no
+        servidor (`MALHAVIVA_STATION_MIN_CONTRIBUTORS`, mínimo 5). Degraus: K a 9 = low, 10 a 19 = medium,
+        20 ou mais = high (o degrau mais baixo já exige K). O número exato nunca é exposto e nenhum campo
+        identifica passageiro, dispositivo ou conta. Toda estação do corredor aparece na lista, com ou sem dado.
+        Anti-diferenciação (RIPD 7.1): o nível é atrasado e suavizado, não instantâneo. Uma mudança entre degraus
+        visíveis, ou de `null` para um nível, só é publicada depois de 60 s com o novo nível estável, e a contagem
+        precisa sair da faixa atual por mais de 2 viagens (histerese). Cair abaixo de K publica `null` na hora,
+        nunca um nível sob K.
+      parameters:
+        - $ref: "#/components/parameters/Corridor"
+        - in: query
+          name: direction
+          required: true
+          schema: { $ref: "#/components/schemas/Direction" }
+      responses:
+        "200":
+          description: Lotação atual por estação.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StationCrowdingSnapshot" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /corridors/{corridor}/stations/{station_id}/checkins:
+    post:
+      tags: [realtime]
+      operationId: createStationCheckin
+      summary: Marcar presença na estação ("Estou nesta estação")
+      security: []
+      description: >
+        Check-in anônimo para a lotação da estação (RIPD R3). Sem conta e sem token: o corpo traz só o sentido e um
+        UUID aleatório gerado no aparelho para este check-in. O servidor guarda apenas o par (estação, sentido, id)
+        em memória por 10 min e nunca o IP nem a posição. Repetir o mesmo id só renova a validade. Conta como uma
+        presença na lotação, somada às viagens paradas (a mesma pessoa pode estar nas duas fontes; não há como
+        deduplicar sem quebrar o anonimato). O k-anonimato não muda: nível só com K presenças distintas, K padrão 5.
+        Limite por IP; excedido devolve 429.
+      parameters:
+        - $ref: "#/components/parameters/Corridor"
+        - in: path
+          name: station_id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StationCheckinRequest" }
+      responses:
+        "204": { description: Check-in registrado por 10 min. }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /corridors/{corridor}/stations/{station_id}/checkins/{checkin_id}:
+    delete:
+      tags: [realtime]
+      operationId: cancelStationCheckin
+      summary: Cancelar o check-in
+      security: []
+      description: >
+        Remove o check-in antes dos 10 min. Idempotente: id desconhecido ou já vencido também devolve 204.
+      parameters:
+        - $ref: "#/components/parameters/Corridor"
+        - in: path
+          name: station_id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: checkin_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: direction
+          required: true
+          schema: { $ref: "#/components/schemas/Direction" }
+      responses:
+        "204": { description: Check-in cancelado. }
+        "400": { $ref: "#/components/responses/Problem" }
+
+  # ---- Fase 5: LGPD e menores ------------------------------------------------------------------------------------
+  /auth/parental-consent/confirm:
+    post:
+      tags: [privacy]
+      operationId: confirmParentalConsent
+      summary: Confirmar o consentimento parental (conta de menor de 12 anos)
+      security: []
+      description: >
+        Passo final do fluxo parental: o responsável recebeu um OTP no contato informado no cadastro e o informa
+        (no aparelho da criança ou repassando o código). Com o OTP correto a conta passa de `pending_parental_consent`
+        a `active` e o consentimento parental fica registrado (contato do responsável, versão da política, data).
+        Resposta igual para handle inexistente, conta que não é pendente e código errado (400 `invalid_code`).
+        OTP de 6 dígitos, 10 min, uso único, 5 tentativas. Limite por IP.
+        Limite do método: prova controle do contato, não que quem o controla é o responsável legal
+        (verificação reforçada fica como evolução, a decidir no RIPD).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [handle, code]
+              properties:
+                handle: { $ref: "#/components/schemas/Handle" }
+                code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "204": { description: Consentimento parental confirmado; a conta já pode entrar. }
+        "400": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/parental-consent/resend:
+    post:
+      tags: [privacy]
+      operationId: resendParentalConsent
+      summary: Reenviar o OTP ao responsável
+      security: []
+      description: >
+        Sempre 202 com o mesmo corpo, exista ou não a conta pendente. Usa a cota de envio do cadastro e exige
+        `captcha_token` (403 `captcha_required`). Contas pendentes sem confirmação em 7 dias são apagadas pela
+        rotina de retenção.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [handle, captcha_token]
+              properties:
+                handle: { $ref: "#/components/schemas/Handle" }
+                captcha_token: { type: string }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "202":
+          description: Pedido aceito. Nada indica se a conta existe ou está pendente.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [accepted] }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403":
+          description: CAPTCHA ausente ou inválido (`captcha_required`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /me/consents:
+    get:
+      tags: [privacy]
+      operationId: listConsents
+      summary: Consentimentos vigentes
+      description: >
+        Um item por finalidade (`location`, `marketing`), sempre os dois, mesmo sem registro. Nada começa concedido
+        (opt-in explícito, art. 8º). O registro de consentimento vive em tabelas próprias e NUNCA é ligado a
+        posições ou telemetria: a ingestão é anônima e não consulta conta nem consentimento. Revogar `location`
+        não afeta a conta (login, contatos, dispositivos continuam funcionando) nem o restante do app.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Estado atual de cada finalidade e a versão vigente da política.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConsentList" }
+        "401": { $ref: "#/components/responses/Problem" }
+
+  /me/consents/history:
+    get:
+      tags: [privacy]
+      operationId: consentHistory
+      summary: Histórico de consentimentos
+      description: Eventos de concessão e revogação, do mais recente ao mais antigo (apêndice somente; art. 18, VIII).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Histórico da própria conta.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ConsentEvent" }
+        "401": { $ref: "#/components/responses/Problem" }
+
+  /me/consents/{purpose}:
+    put:
+      tags: [privacy]
+      operationId: grantConsent
+      summary: Conceder (ou renovar) um consentimento
+      description: >
+        Idempotente: repetir com a mesma versão não gera novo evento. `policy_version` deve ser a vigente
+        (409 `policy_version_mismatch` se o app mostrou texto antigo). `marketing` é consentimento separado e
+        é proibido para menores de 18 anos (403 `marketing_forbidden_for_minors`). Sem perfilamento de
+        adolescentes: nenhuma finalidade os inclui.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ConsentPurpose"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [policy_version]
+              properties:
+                policy_version: { type: string, maxLength: 32 }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "200":
+          description: Consentimento vigente.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Consent" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+    delete:
+      tags: [privacy]
+      operationId: revokeConsent
+      summary: Revogar um consentimento
+      description: >
+        Idempotente (204 mesmo sem consentimento ativo). Revogar `location` apenas registra o evento; o app para de
+        coletar e enviar. O servidor não pode (nem deve) ligar a revogação à telemetria já anonimizada.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ConsentPurpose"
+      responses:
+        "204": { description: Consentimento revogado (ou já não havia). }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /me/export:
+    get:
+      tags: [privacy]
+      operationId: exportMyData
+      summary: Exportar todos os dados pessoais (LGPD art. 18, II e V)
+      description: >
+        JSON com tudo que o servidor guarda sobre a conta: cadastro, contatos, dispositivos e sessões, consentimentos
+        (vigentes e histórico), consentimento parental, trocas de contato abertas e registros de acesso (Marco
+        Civil). Nunca inclui hash de senha, segredo TOTP, códigos de backup nem OTPs. A telemetria é anônima
+        (sem vínculo com a conta) e portanto não faz parte do export. `Cache-Control: no-store`.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Dados da própria conta.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DataExport" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /me:
+    get:
+      tags: [privacy]
+      operationId: getMyAccount
+      summary: Conta atual (handle, faixa etária, status)
+      description: >
+        Fonte da faixa etária para o app. Menor de 18 anos (`under_12` ou `teen_12_17`) não compartilha localização;
+        o app trata faixa desconhecida como bloqueada. Aceita só token de acesso completo.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Conta da sessão.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "401": { $ref: "#/components/responses/Problem" }
+    patch:
+      tags: [privacy]
+      operationId: correctMyData
+      summary: Corrigir dados (LGPD art. 18, III)
+      description: >
+        Corrige o `handle` (único, 409 se indisponível) e define ou apaga o `gender` opcional (valor inválido: 400
+        `invalid_gender`). `gender` está em stand-by (desativado por padrão, `MALHAVIVA_GENDER_ENABLED`): com a
+        funcionalidade desligada, qualquer corpo com `gender` responde 400 `feature_disabled`. Corpo sem nenhum dos dois: 400. Telefone e e-mail são corrigidos em `/me/contacts`
+        (com OTP). A faixa etária não é autoatendimento (evita burlar o portão de idade): correção pelo canal do
+        Encarregado.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                handle: { $ref: "#/components/schemas/Handle" }
+                gender:
+                  description: Define o gênero opcional; `null` apaga (volta a "não informado"). Ausente = não altera.
+                  oneOf:
+                    - { $ref: "#/components/schemas/Gender" }
+                    - { type: "null" }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "200":
+          description: Conta atualizada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+    delete:
+      tags: [privacy]
+      operationId: deleteMyAccount
+      summary: Excluir a conta e os dados pessoais (LGPD art. 18, VI)
+      description: >
+        Exige a senha atual (ação irreversível; 403 `invalid_password`). Em uma transação: apaga sessões,
+        dispositivos, refresh tokens, OTPs, contatos, TOTP, códigos de backup, consentimentos, histórico e
+        consentimento parental; anonimiza a linha da conta (handle aleatório, sem hash de senha, contatos nulos).
+        Resta apenas um túmulo anônimo (id, datas) por 30 dias e os registros de acesso exigidos pelo Marco Civil
+        (art. 15, 6 meses), ambos apagados pela rotina de retenção. A telemetria já é anônima.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password]
+              properties:
+                current_password: { type: string, minLength: 1, maxLength: 128 }
+      responses:
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "204": { description: Conta excluída; todos os tokens deixam de valer nas rotas sensíveis. }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Access JWT de 15 min com `iss`, `aud` (ambos verificados) e `sid` (família de refresh). Rotas sensíveis
+        (`/me/contacts*`, `/me/mfa/*`, `/admin/*`, revogar dispositivo) consultam o banco e respondem 401 se a
+        sessão foi revogada, sem esperar o vencimento.
+    telemetryToken:
+      type: http
+      scheme: bearer
+      description: Token anônimo de /telemetry/tokens. Nunca o token de conta.
+
+  parameters:
+    ConsentPurpose:
+      in: path
+      name: purpose
+      required: true
+      schema: { $ref: "#/components/schemas/ConsentPurposeName" }
+    Corridor:
+      in: path
+      name: corridor
+      required: true
+      schema: { $ref: "#/components/schemas/Corridor" }
+
+  responses:
+    Problem:
+      description: Erro (RFC 9457).
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    PayloadTooLarge:
+      description: Corpo JSON maior que 8 KiB; rejeitado sem ler o excesso e antes de qualquer validação.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    TooManyRequests:
+      description: Limite excedido.
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+
+  schemas:
+    Corridor:
+      type: string
+      enum: [RAMAL_SANTA_CRUZ]
+    Direction:
+      type: string
+      enum: [SANTA_CRUZ_TO_CENTRAL, CENTRAL_TO_SANTA_CRUZ]
+    Handle:
+      type: string
+      pattern: "^@[a-zA-Z0-9_]{3,20}$"
+      description: Comparado sem diferenciar maiúsculas.
+
+    CreateAccountRequest:
+      type: object
+      required: [handle, password, birth_date]
+      properties:
+        handle: { $ref: "#/components/schemas/Handle" }
+        password: { type: string, minLength: 8, maxLength: 128 }
+        birth_date: { type: string, format: date, description: "Autodeclarada; usada só para calcular a faixa etária e descartada (não é guardada)." }
+        guardian: { $ref: "#/components/schemas/Guardian" }
+        gender:
+          allOf: [{ $ref: "#/components/schemas/Gender" }]
+          description: "Em stand-by (desativado por padrão, `MALHAVIVA_GENDER_ENABLED`). Desligado, o servidor ignora o campo e a conta fica sem gênero. Ligado, é opcional; ausente = não informado (diferente de `prefer_not_to_say`) e valor fora do enum responde 400 `invalid_gender`."
+        phone: { type: string, pattern: "^\\+[1-9][0-9]{7,14}$", description: E.164. }
+        email: { type: string, format: email, maxLength: 254 }
+        captcha_token: { type: string, description: Exigido quando há telefone ou e-mail (o cadastro envia mensagem). }
+    DeviceLabel:
+      type: string
+      maxLength: 64
+      description: Nome amigável do aparelho, sanitizado pelo servidor.
+    Device:
+      type: object
+      required: [id, label, created_at, last_used_at]
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: string }
+        created_at: { type: string, format: date-time }
+        last_used_at: { type: string, format: date-time }
+    Account:
+      type: object
+      required: [handle, contacts_verified]
+      properties:
+        handle: { $ref: "#/components/schemas/Handle" }
+        age_bracket: { $ref: "#/components/schemas/AgeBracket" }
+        status: { $ref: "#/components/schemas/AccountStatus" }
+        gender:
+          description: "`null` quando não informado; sempre `null` enquanto o gênero estiver em stand-by (desativado por padrão)."
+          oneOf:
+            - { $ref: "#/components/schemas/Gender" }
+            - { type: "null" }
+        contacts_verified:
+          type: object
+          required: [phone, email]
+          properties:
+            phone: { type: boolean }
+            email: { type: boolean }
+    ContactChannel:
+      type: string
+      enum: [phone, email]
+    SetContactRequest:
+      type: object
+      required: [channel, value]
+      properties:
+        channel: { $ref: "#/components/schemas/ContactChannel" }
+        value: { type: string, maxLength: 254, description: "Telefone em E.164 ou e-mail, conforme o canal." }
+        current_password: { type: string, description: "Obrigatória em toda operação: primeiro contato, nova verificação ou troca." }
+    ContactChangeStarted:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [verification_sent, change_pending] }
+        change_id: { type: string, format: uuid }
+        effective_at: { type: string, format: date-time }
+    ConfirmContactRequest:
+      type: object
+      required: [channel, code]
+      properties:
+        channel: { $ref: "#/components/schemas/ContactChannel" }
+        code: { type: string, pattern: "^[0-9]{6}$" }
+        change_id: { type: string, format: uuid }
+        current_password: { type: string, description: Obrigatória sem change_id (verificar o contato gravado). }
+    ContactsState:
+      type: object
+      required: [contacts_verified, pending_changes]
+      properties:
+        contacts_verified:
+          type: object
+          required: [phone, email]
+          properties:
+            phone: { type: boolean }
+            email: { type: boolean }
+        pending_changes:
+          type: array
+          items:
+            type: object
+            required: [id, channel, effective_at, confirmed]
+            properties:
+              id: { type: string, format: uuid }
+              channel: { $ref: "#/components/schemas/ContactChannel" }
+              effective_at: { type: string, format: date-time }
+              confirmed: { type: boolean }
+    TokenPair:
+      type: object
+      required: [access_token, refresh_token, expires_in]
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        expires_in: { type: integer, description: Segundos. }
+      description: >
+        Claims do access JWT: `sub` (id da conta), `iat`, `exp`, `amr` (`["pwd"]` ou `["pwd","otp"]`) e, só no token
+        restrito, `scope: mfa_enroll_only`. Sem PII. O refresh preserva o `amr` da sessão.
+    MfaChallenge:
+      type: object
+      required: [mfa_required, mfa_token, expires_in]
+      properties:
+        mfa_required: { type: boolean, enum: [true] }
+        mfa_token: { type: string, description: "Opaco, uso único." }
+        expires_in: { type: integer, description: Segundos (300). }
+    MfaEnrollmentRequired:
+      type: object
+      required: [mfa_enrollment_required, access_token, expires_in, scope]
+      properties:
+        mfa_enrollment_required: { type: boolean, enum: [true] }
+        access_token: { type: string, description: Restrito às rotas de enrolamento de TOTP. }
+        expires_in: { type: integer, description: Segundos. }
+        scope: { type: string, enum: [mfa_enroll_only] }
+    TotpEnrollment:
+      type: object
+      required: [secret, otpauth_uri]
+      properties:
+        secret: { type: string, description: Base32. Devolvido só nesta resposta. }
+        otpauth_uri: { type: string }
+
+    BackupCode:
+      type: string
+      minLength: 10
+      maxLength: 16
+      description: >
+        Código de recuperação: 10 caracteres de `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (sem I, O, 0, 1). Maiúsculas ou
+        minúsculas, espaços e hifens na digitação são ignorados.
+    BackupCodes:
+      type: object
+      required: [backup_codes]
+      properties:
+        backup_codes:
+          type: array
+          minItems: 10
+          maxItems: 10
+          items: { type: string, pattern: "^[A-HJ-NP-Z2-9]{10}$" }
+          description: Códigos de uso único, em claro só nesta resposta.
+
+    TelemetryToken:
+      type: object
+      required: [token, signing_key, anon_epoch_id, expires_at]
+      properties:
+        token: { type: string }
+        signing_key: { type: string, description: "Chave HMAC do token, em base64url." }
+        anon_epoch_id: { type: string, description: "ID efêmero, troca a cada token." }
+        expires_at: { type: string, format: date-time }
+
+    TelemetryBatch:
+      type: object
+      required: [anon_epoch_id, corridor, samples]
+      additionalProperties: false
+      properties:
+        anon_epoch_id: { type: string }
+        corridor: { $ref: "#/components/schemas/Corridor" }
+        samples:
+          type: array
+          minItems: 1
+          maxItems: 120
+          items: { $ref: "#/components/schemas/Sample" }
+    Sample:
+      type: object
+      required: [seq, ts, lat, lon, accuracy_m]
+      additionalProperties: false
+      properties:
+        seq: { type: integer, minimum: 0 }
+        ts: { type: string, format: date-time }
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lon: { type: number, minimum: -180, maximum: 180 }
+        accuracy_m: { type: number, minimum: 0 }
+        speed_mps: { type: number, minimum: 0 }
+        bearing_deg: { type: number, minimum: 0, exclusiveMaximum: 360, description: "Rumo do GPS (0 = norte, horário). Opcional; só vale em movimento." }
+        motion_state: { type: string, enum: [MOVING, STATIONARY, UNKNOWN] }
+        mock_location: { type: boolean, description: Sinal do sistema; true descarta a amostra. }
+    BatchResult:
+      type: object
+      required: [accepted, rejected]
+      properties:
+        accepted: { type: integer }
+        rejected:
+          type: object
+          additionalProperties: { type: integer }
+          description: "Contagem por motivo: ACCURACY, OFF_CORRIDOR (mais de 150 m do traçado), IMPLAUSIBLE_SPEED, MOCK, DUPLICATE, STALE."
+
+    TrainState:
+      type: object
+      required: [id, along_m, speed_mps, confidence, updated_at_ms, situation, station_id, etas]
+      properties:
+        id: { type: string, description: "ID efemero do cluster; nao deriva de nenhum id de passageiro." }
+        along_m: { type: number, description: "Posicao ao longo da via, em metros, projetada para o instante da resposta." }
+        speed_mps: { type: number, minimum: 0 }
+        confidence:
+          type: string
+          enum: [low, medium, high]
+          description: >
+            Faixa grossa pelo numero de viagens anonimas distintas: 1 a 2 = low, 3 a 6 = medium, 7 ou mais = high.
+            O numero exato de contribuintes nunca e exposto.
+        updated_at_ms: { type: integer, format: int64, description: "Instante da amostra mais nova do trem (nao da projecao)." }
+        situation:
+          type: string
+          enum: [moving, at_station, stopped_between_stations]
+          description: >
+            Situacao do trem; o texto em portugues e montado pelo cliente. at_station = parado (ate 1 m/s) a ate 100 m
+            de uma estacao. stopped_between_stations = ALERTA: parado fora de estacao ha 60 s ou mais.
+        station_id:
+          description: >
+            Estacao de referencia: a atual quando situation = at_station; nos demais casos, a proxima a frente no sentido.
+            Nulo se nao ha estacao a frente.
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        etas:
+          type: array
+          description: >
+            Estimativa de chegada (marcha constante, sem paradas) em cada estacao a frente no sentido, ate 99 min.
+            Vazio se o trem esta parado ou a menos de 1 m/s.
+          items:
+            type: object
+            required: [station_id, eta_s]
+            properties:
+              station_id: { type: string }
+              eta_s: { type: integer, minimum: 0, description: "Segundos desde o instante da resposta." }
+    TrainsSnapshot:
+      type: object
+      required: [corridor, direction, trains]
+      properties:
+        corridor: { $ref: "#/components/schemas/Corridor" }
+        direction: { $ref: "#/components/schemas/Direction" }
+        trains:
+          type: array
+          items: { $ref: "#/components/schemas/TrainState" }
+
+    CrowdingLevel:
+      type: string
+      enum: [low, medium, high]
+      description: >
+        Faixa grossa de lotação (K a 9 viagens = low, 10 a 19 = medium, 20 ou mais = high). Nunca a contagem exata.
+    StationCrowding:
+      type: object
+      required: [station_id, level]
+      properties:
+        station_id: { type: string }
+        level:
+          description: "`null` = sem dados de lotação (menos de K viagens anônimas distintas na estação)."
+          oneOf:
+            - { $ref: "#/components/schemas/CrowdingLevel" }
+            - { type: "null" }
+    StationCheckinRequest:
+      type: object
+      required: [direction, checkin_id]
+      additionalProperties: false
+      properties:
+        direction: { $ref: "#/components/schemas/Direction" }
+        checkin_id: { type: string, format: uuid, description: "UUID aleatorio deste check-in, gerado no aparelho; nao e reaproveitado." }
+    StationCrowdingSnapshot:
+      type: object
+      required: [corridor, direction, stations]
+      properties:
+        corridor: { $ref: "#/components/schemas/Corridor" }
+        direction: { $ref: "#/components/schemas/Direction" }
+        stations:
+          type: array
+          items: { $ref: "#/components/schemas/StationCrowding" }
+
+    CorridorNetwork:
+      type: object
+      required: [corridor, stations, segments]
+      properties:
+        corridor: { $ref: "#/components/schemas/Corridor" }
+        stations:
+          type: array
+          items:
+            type: object
+            required: [station_id, name, seq_order, km, platform]
+            properties:
+              station_id: { type: string }
+              name: { type: string }
+              seq_order: { type: integer }
+              km: { type: number }
+              platform: { type: object, description: GeoJSON Polygon. }
+        segments:
+          type: array
+          items:
+            type: object
+            required: [segment_id, from_station_id, to_station_id, line]
+            properties:
+              segment_id: { type: string }
+              from_station_id: { type: string }
+              to_station_id: { type: string }
+              line: { type: object, description: GeoJSON LineString. }
+
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+
+    AgeBracket:
+      type: string
+      enum: [under_12, teen_12_17, adult]
+      description: >
+        Faixa etária autodeclarada no cadastro. O servidor calcula a faixa a partir de `birth_date` e NÃO guarda a
+        data de nascimento (minimização). Autodeclaração não é verificação; é o portão mínimo desta fase.
+    Gender:
+      type: string
+      enum: [male, female, non_binary, prefer_not_to_say]
+      description: >
+        Em stand-by: funcionalidade desativada por padrão (`MALHAVIVA_GENDER_ENABLED`), nada é coletado nesta versão.
+        Gênero autodeclarado e opcional, só para estatísticas agregadas e anônimas de perfil de uso (buckets com menos
+        de 5 contas são suprimidos). Nunca é exibido por pessoa nem cruzado com localização, viagens ou telemetria.
+        Ausente/null = não informado, o que é diferente de `prefer_not_to_say`. Apagado na exclusão da conta.
+    AccountStatus:
+      type: string
+      enum: [active, pending_parental_consent]
+    Guardian:
+      type: object
+      required: [channel, value]
+      description: Contato do responsável. Obrigatório para menores de 12 anos; nunca é contato de recuperação da conta.
+      properties:
+        channel: { $ref: "#/components/schemas/ContactChannel" }
+        value: { type: string, maxLength: 254 }
+    ConsentPurposeName:
+      type: string
+      enum: [location, marketing]
+    Consent:
+      type: object
+      required: [purpose, granted, current_policy_version]
+      properties:
+        purpose: { $ref: "#/components/schemas/ConsentPurposeName" }
+        granted: { type: boolean }
+        policy_version: { type: string, description: Versão da política aceita (ausente se nunca concedido). }
+        granted_at: { type: string, format: date-time }
+        revoked_at: { type: string, format: date-time }
+        current_policy_version: { type: string }
+        needs_reconsent:
+          type: boolean
+          description: Concedido numa versão diferente da vigente; o app deve pedir de novo.
+    ConsentList:
+      type: object
+      required: [policy_version, consents]
+      properties:
+        policy_version: { type: string }
+        consents:
+          type: array
+          items: { $ref: "#/components/schemas/Consent" }
+    ConsentEvent:
+      type: object
+      required: [purpose, action, policy_version, occurred_at]
+      properties:
+        purpose: { $ref: "#/components/schemas/ConsentPurposeName" }
+        action: { type: string, enum: [granted, revoked] }
+        policy_version: { type: string }
+        occurred_at: { type: string, format: date-time }
+    DataExport:
+      type: object
+      required: [generated_at, account, contacts, devices, consents, consent_history, access_logs]
+      properties:
+        generated_at: { type: string, format: date-time }
+        account:
+          type: object
+          required: [account_id, handle, created_at, age_bracket, status, totp_enabled]
+          properties:
+            account_id: { type: string, format: uuid }
+            handle: { $ref: "#/components/schemas/Handle" }
+            created_at: { type: string, format: date-time }
+            age_bracket: { $ref: "#/components/schemas/AgeBracket" }
+            status: { $ref: "#/components/schemas/AccountStatus" }
+            gender:
+              oneOf:
+                - { $ref: "#/components/schemas/Gender" }
+                - { type: "null" }
+            totp_enabled: { type: boolean }
+        contacts:
+          type: object
+          properties:
+            phone: { type: [string, "null"] }
+            phone_verified_at: { type: [string, "null"], format: date-time }
+            email: { type: [string, "null"] }
+            email_verified_at: { type: [string, "null"], format: date-time }
+            pending_changes:
+              type: array
+              items:
+                type: object
+                properties:
+                  channel: { $ref: "#/components/schemas/ContactChannel" }
+                  new_value: { type: string }
+                  effective_at: { type: string, format: date-time }
+        devices:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              label: { type: string }
+              created_at: { type: string, format: date-time }
+              last_used_at: { type: string, format: date-time }
+              revoked_at: { type: [string, "null"], format: date-time }
+        consents:
+          type: array
+          items: { $ref: "#/components/schemas/Consent" }
+        consent_history:
+          type: array
+          items: { $ref: "#/components/schemas/ConsentEvent" }
+        parental_consent:
+          type: [object, "null"]
+          properties:
+            guardian_channel: { $ref: "#/components/schemas/ContactChannel" }
+            guardian_contact: { type: string }
+            requested_at: { type: string, format: date-time }
+            verified_at: { type: [string, "null"], format: date-time }
+        access_logs:
+          type: array
+          items:
+            type: object
+            properties:
+              event: { type: string }
+              ip: { type: string }
+              occurred_at: { type: string, format: date-time }

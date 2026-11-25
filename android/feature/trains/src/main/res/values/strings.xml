@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="trains_line_name">Ramal Santa Cruz</string>
+    <string name="trains_direction_central_to_santa_cruz">Central do Brasil → Santa Cruz</string>
+    <string name="trains_direction_santa_cruz_to_central">Santa Cruz → Central do Brasil</string>
+    <string name="trains_direction_short_central_to_santa_cruz">Para Santa Cruz</string>
+    <string name="trains_direction_short_santa_cruz_to_central">Para Central</string>
+
+    <string name="trains_health_connecting">Conectando…</string>
+    <string name="trains_health_live">Ao vivo</string>
+    <string name="trains_health_estimated">Posição estimada</string>
+    <string name="trains_health_no_signal">Sem sinal</string>
+
+    <string name="trains_refresh_connecting">Conectando…</string>
+    <string name="trains_refresh_reconnecting">Sem conexão. Tentando de novo…</string>
+    <string name="trains_refresh_ago">Atualizado há %1$d s</string>
+    <string name="trains_refresh_now">Atualizado agora</string>
+    <string name="trains_refresh_waiting">Aguardando trens</string>
+
+    <string name="trains_empty_title">Nenhum trem agora</string>
+    <string name="trains_empty_message">Quando um trem for detectado neste sentido, ele aparece aqui.</string>
+    <string name="trains_no_signal_title">Sem sinal</string>
+    <string name="trains_no_signal_message">Não conseguimos atualizar as posições. Mostramos só o que já sabíamos e seguimos tentando.</string>
+
+    <string name="trains_network_error_title">Não foi possível carregar a linha</string>
+    <string name="trains_network_error_message">Verifique sua conexão. Tentaremos de novo automaticamente.</string>
+    <string name="trains_network_error_retry">Tentar agora</string>
+    <string name="trains_loading">Carregando a linha…</string>
+
+    <string name="trains_view_list">Lista</string>
+    <string name="trains_view_map">Mapa</string>
+    <string name="trains_map_unavailable">Mapa indisponível para esta linha.</string>
+    <string name="trains_eta_now">agora</string>
+    <string name="trains_eta_minutes">~%1$d min</string>
+    <string name="trains_eta_none">—</string>
+
+    <string name="trains_list_title">Trens neste sentido</string>
+    <string name="trains_item_near">Perto de %1$s</string>
+    <string name="trains_item_at">Em %1$s</string>
+    <string name="trains_item_live">ao vivo</string>
+    <string name="trains_item_estimated">estimado</string>
+    <string name="trains_item_no_signal">sem sinal</string>
+    <string name="trains_item_confidence_low">Confiança baixa</string>
+    <string name="trains_item_confidence_medium">Confiança média</string>
+    <string name="trains_item_confidence_high">Confiança alta</string>
+    <string name="trains_crowding_low">Lotação: baixa</string>
+    <string name="trains_crowding_medium">Lotação: média</string>
+    <string name="trains_crowding_high">Lotação: alta</string>
+    <string name="trains_crowding_none">Lotação: sem dados</string>
+    <string name="trains_alert_stopped">Atenção: trem parado entre estações.</string>
+    <string name="trains_status_at">Parado em %1$s</string>
+    <string name="trains_status_moving">Andando</string>
+    <string name="trains_status_moving_next">Andando, próxima: %1$s</string>
+    <string name="trains_status_stopped_between">Parado entre estações</string>
+    <string name="trains_status_stopped_between_next">Parado entre estações, próxima: %1$s</string>
+    <string name="trains_checkin_hint">Toque numa estação para avisar que você está nela.</string>
+    <string name="trains_checkin_picked">Estação escolhida: %1$s. O aviso é anônimo, vale por 10 minutos e ajuda a mostrar a lotação.</string>
+    <string name="trains_checkin_button">Estou nesta estação</string>
+    <string name="trains_checkin_active">Presença avisada de forma anônima por 10 minutos.</string>
+    <string name="trains_checkin_cancel">Cancelar presença</string>
+    <string name="trains_marker_description">Trem, %1$s, %2$s</string>
+</resources>

@@ -47,3 +47,9 @@ GoogleService-Info.plist
 
 # Ferramentas de assistente (fora dos artefatos de release)
 .omc/
+
+ios/*.xcodeproj/
+.terraform/
+*.tfstate*
+*.tfvars
+!.terraform.lock.hcl

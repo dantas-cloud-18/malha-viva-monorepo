@@ -1,0 +1,28 @@
+{
+  "_status": "Paleta 3 Floresta Profunda aprovada pelo Luciano (24/11). Fonte unica de tokens; Compose e SwiftUI sao gerados daqui.",
+  "color": {
+    "light": {
+      "surface": "#EEF4F0", "primary": "#0B2B22", "accent": "#2E7D4F", "text": "#0E1A15",
+      "textMuted": "#4F6A5F", "live": "#2E7D4F",
+      "status": { "onTime": "#005F8A", "delayed": "#8A5300", "interrupted": "#C62828", "noSignal": "#5F6B66", "lowConfidence": "#6A4C9C" }
+    },
+    "dark": {
+      "surface": "#0F392D", "primary": "#E1E5E7", "accent": "#48D467", "text": "#F2F5F3",
+      "textMuted": "#9FB3AA", "live": "#3BE666",
+      "status": { "onTime": "#5CC8FF", "delayed": "#FFB74D", "interrupted": "#FF8A80", "noSignal": "#9AA6A0", "lowConfidence": "#B39DDB" }
+    }
+  },
+  "brand": { "pine": "#0F392D", "deep": "#03221C", "ring": "#0C3B31", "silver": "#CDD2D5", "signal": "#3BE666", "tagline": "A rede viva da via" },
+  "type": {
+    "family": { "brand": "Space Grotesk", "ui": "Inter" },
+    "features": ["tnum"],
+    "scale": {
+      "display": [32, 38], "title": [22, 28], "subtitle": [17, 24], "body": [16, 24], "caption": [13, 18], "time": [22, 26]
+    }
+  },
+  "space": [4, 8, 12, 16, 24, 32, 48],
+  "radius": { "field": 8, "card": 12, "sheet": 16, "pill": 999 },
+  "motion": { "enterMs": 200, "exitMs": 150, "livePulseSeconds": [2, 3], "checkInMaxMs": 1000 },
+  "haptics": { "accepted": "short", "rejected": "double", "arrival": "long" },
+  "touchTargetMin": { "android": 48, "ios": 44 }
+}

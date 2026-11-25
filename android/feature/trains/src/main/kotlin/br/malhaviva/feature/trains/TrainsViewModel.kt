@@ -1,0 +1,126 @@
+package br.malhaviva.feature.trains
+
+import androidx.lifecycle.viewModelScope
+import br.malhaviva.core.ui.MviViewModel
+import br.malhaviva.feature.trains.net.Backoff
+import br.malhaviva.feature.trains.net.TrainsFeed
+import br.malhaviva.feature.trains.net.TrainsSource
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import java.util.UUID
+
+/**
+ * Liga o [TrainsSource] ao estado. Tudo (conexao, polling, tick) so roda entre [setActive] true e false:
+ * a tela chama conforme o ciclo de vida, entao nada consome rede ou bateria fora de vista.
+ * Tambem guarda o check-in de estacao (depende de source + estado; extrair se a classe crescer mais).
+ */
+@Suppress("TooManyFunctions")
+class TrainsViewModel(
+    private val source: TrainsSource,
+    private val clock: () -> Long = { System.nanoTime() / NANOS_PER_MS },
+    private val backoff: Backoff = Backoff(),
+) : MviViewModel<TrainsState, TrainsIntent>(TrainsState()) {
+    private var session: Job? = null
+
+    fun setActive(active: Boolean) {
+        if (active == (session?.isActive == true)) return
+        if (active) start() else stop()
+    }
+
+    fun selectDirection(direction: Direction) {
+        if (direction == state.value.direction) return
+        cancelCheckIn()
+        onIntent(TrainsIntent.DirectionSelected(direction))
+        if (session?.isActive == true) start()
+    }
+
+    /** Marca presenca na estacao por 10 min; troca o check-in anterior, se houver. So vale se o servidor aceitar. */
+    fun checkIn(stationId: String) {
+        cancelCheckIn()
+        val direction = state.value.direction
+        val id = UUID.randomUUID().toString()
+        viewModelScope.launch {
+            if (source.checkIn(direction, stationId, id)) {
+                val expiresAt = clock() + TrainsPolicy.CHECKIN_TTL_MS
+                onIntent(TrainsIntent.CheckInChanged(StationCheckIn(stationId, direction, id, expiresAt)))
+            }
+        }
+    }
+
+    fun cancelCheckIn() {
+        val current = state.value.checkIn ?: return
+        onIntent(TrainsIntent.CheckInChanged(null))
+        viewModelScope.launch { source.cancelCheckIn(current.direction, current.stationId, current.id) }
+    }
+
+    /** Tenta de novo agora (botao da tela de erro): zera o backoff da malha e reabre o stream. */
+    fun retry() {
+        if (session?.isActive == true) start()
+    }
+
+    override fun reduce(
+        state: TrainsState,
+        intent: TrainsIntent,
+    ): TrainsState = reduceTrains(state, intent)
+
+    private fun start() {
+        session?.cancel()
+        onIntent(TrainsIntent.Tick(clock()))
+        session =
+            viewModelScope.launch {
+                launch { tick() }
+                launch { loadNetwork() }
+                launch { pollCrowding() }
+                source.feed(state.value.direction).collect { onIntent(it.toIntent()) }
+            }
+    }
+
+    private fun stop() {
+        session?.cancel()
+        session = null
+        onIntent(TrainsIntent.Paused)
+    }
+
+    private suspend fun tick() {
+        while (true) {
+            delay(TrainsPolicy.TICK_MS)
+            onIntent(TrainsIntent.Tick(clock()))
+        }
+    }
+
+    private suspend fun pollCrowding() {
+        while (true) {
+            val crowding = source.crowding(state.value.direction)
+            onIntent(TrainsIntent.CrowdingLoaded(crowding.orEmpty()))
+            delay(TrainsPolicy.CROWDING_POLL_MS)
+        }
+    }
+
+    private suspend fun loadNetwork() {
+        var attempt = 0
+        while (state.value.line == null) {
+            val line = source.network()
+            if (line != null) {
+                onIntent(TrainsIntent.NetworkLoaded(line))
+            } else {
+                onIntent(TrainsIntent.NetworkFailed)
+                delay(backoff.delayMs(++attempt))
+            }
+        }
+    }
+
+    private fun TrainsFeed.toIntent(): TrainsIntent =
+        when (this) {
+            TrainsFeed.Connecting -> TrainsIntent.Connecting
+            TrainsFeed.Opened -> TrainsIntent.StreamOpened
+            is TrainsFeed.Train -> TrainsIntent.TrainReceived(train, clock())
+            is TrainsFeed.Snapshot -> TrainsIntent.SnapshotReceived(trains, clock())
+            is TrainsFeed.Lost -> TrainsIntent.StreamLost(attempt)
+        }
+
+    private companion object {
+        const val NANOS_PER_MS = 1_000_000L
+    }
+}

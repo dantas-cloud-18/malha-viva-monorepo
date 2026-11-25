@@ -1,0 +1,204 @@
+package br.malhaviva.auth
+
+import br.malhaviva.auth.recovery.BackupCodeService
+import br.malhaviva.auth.recovery.InMemoryBackupCodeRepository
+import br.malhaviva.auth.recovery.InMemoryTotpRepository
+import br.malhaviva.auth.recovery.RecordingSecurityNotifier
+import br.malhaviva.auth.recovery.TEST_OTP_KEY
+import br.malhaviva.auth.recovery.TotpService
+import java.time.Instant
+import java.util.UUID
+
+/** Segredos fixos e falsos: so existem nos testes. */
+val TEST_PEPPER = ByteArray(32) { (it + 1).toByte() }
+val TEST_JWT_SECRET = ByteArray(32) { (100 + it).toByte() }
+
+/** Parametros minimos do argon2 para os testes de rota nao levarem segundos. */
+val FAST_PARAMS = Argon2Params(memoryKib = 64, iterations = 1, parallelism = 1)
+
+const val STRONG_PASSWORD = "quantas estrelas cabem num trem vazio"
+const val PWNED_BUT_STRONG = "este-segredo-vazou-mas-parece-forte-9Qx"
+
+class FakePwned(
+    private val leaked: Set<String> = setOf(PWNED_BUT_STRONG),
+) : PwnedPasswordsChecker {
+    override suspend fun isPwned(password: String) = password in leaked
+}
+
+class CountingHasher(
+    pepper: ByteArray = TEST_PEPPER,
+    params: Argon2Params = FAST_PARAMS,
+) : PasswordHasher(pepper, params) {
+    var verifyCalls = 0
+
+    override fun verify(
+        password: String,
+        phc: String,
+    ): Boolean {
+        verifyCalls++
+        return super.verify(password, phc)
+    }
+}
+
+class InMemoryAccountRepository : AccountRepository {
+    private val rows = LinkedHashMap<UUID, AccountRecord>()
+
+    @Synchronized
+    override fun create(
+        handle: String,
+        passwordHash: String,
+        ageBracket: AgeBracket,
+        gender: Gender?,
+    ): UUID? =
+        if (rows.values.any { it.handle.equals(handle, ignoreCase = true) }) {
+            null
+        } else {
+            UUID.randomUUID().also {
+                rows[it] =
+                    AccountRecord(it, handle, passwordHash, ageBracket = ageBracket, gender = gender)
+            }
+        }
+
+    @Synchronized
+    override fun findByHandle(handle: String) = rows.values.firstOrNull { it.handle.equals(handle, ignoreCase = true) }
+
+    @Synchronized
+    override fun findById(id: UUID) = rows[id]
+
+    @Synchronized
+    override fun updatePasswordHash(
+        accountId: UUID,
+        passwordHash: String,
+    ) {
+        rows[accountId] = rows.getValue(accountId).copy(passwordHash = passwordHash)
+    }
+
+    private val enrollHashes = HashMap<UUID, String>()
+
+    @Synchronized
+    override fun consumeAdminEnrollCode(
+        accountId: UUID,
+        codeHash: String,
+    ): Boolean {
+        val ok = rows[accountId]?.role == ROLE_ADMIN && enrollHashes[accountId] == codeHash
+        if (ok) enrollHashes.remove(accountId)
+        return ok
+    }
+
+    /** So nos testes: o passo manual do operador grava o hash do codigo junto com o papel admin. */
+    @Synchronized
+    fun setAdminEnrollCode(
+        accountId: UUID,
+        code: String,
+    ) {
+        enrollHashes[accountId] = sha256Hex(code)
+    }
+
+    /** So nos testes: promover a admin e manual no banco em producao. */
+    @Synchronized
+    fun setRole(
+        accountId: UUID,
+        role: String,
+    ) {
+        rows[accountId] = rows.getValue(accountId).copy(role = role)
+    }
+}
+
+class InMemorySessionRepository : SessionRepository {
+    private val devices = LinkedHashMap<UUID, DeviceRecord>()
+    private val revokedDevices = mutableSetOf<UUID>()
+    private val tokens = LinkedHashMap<String, RefreshRecord>()
+
+    val tokenRows: List<RefreshRecord> @Synchronized get() = tokens.values.toList()
+
+    @Synchronized
+    override fun createDevice(
+        device: DeviceRecord,
+        firstToken: RefreshRecord,
+    ) {
+        devices[device.id] = device
+        tokens[firstToken.tokenHash] = firstToken
+    }
+
+    @Synchronized
+    override fun findToken(tokenHash: String) = tokens[tokenHash]
+
+    @Synchronized
+    override fun rotate(
+        oldHash: String,
+        next: RefreshRecord,
+        now: Instant,
+    ): Boolean {
+        val old = tokens[oldHash]
+        val swappable = old != null && old.replacedAt == null && old.revokedAt == null
+        if (swappable && old != null) {
+            tokens[oldHash] = old.copy(replacedAt = now)
+            tokens[next.tokenHash] = next
+            devices[next.familyId]?.let { devices[it.id] = it.copy(lastUsedAt = now) }
+        }
+        return swappable
+    }
+
+    @Synchronized
+    override fun revokeFamily(
+        familyId: UUID,
+        now: Instant,
+    ) {
+        tokens.replaceAll { _, t -> if (t.familyId == familyId && t.revokedAt == null) t.copy(revokedAt = now) else t }
+        revokedDevices += familyId
+    }
+
+    @Synchronized
+    override fun revokeAll(
+        accountId: UUID,
+        now: Instant,
+    ) {
+        devices.values.filter { it.accountId == accountId }.forEach { revokeFamily(it.id, now) }
+    }
+
+    @Synchronized
+    override fun isFamilyActive(familyId: UUID) = familyId in devices && familyId !in revokedDevices
+
+    @Synchronized
+    override fun listDevices(accountId: UUID) =
+        devices.values.filter { it.accountId == accountId && it.id !in revokedDevices }
+
+    @Synchronized
+    override fun revokeDevice(
+        accountId: UUID,
+        deviceId: UUID,
+        now: Instant,
+    ): Boolean {
+        val owned = devices[deviceId]?.accountId == accountId && deviceId !in revokedDevices
+        if (owned) revokeFamily(deviceId, now)
+        return owned
+    }
+}
+
+/** Monta o plano de conta inteiro em memoria, com relogio controlavel. */
+class TestAuth(
+    var now: Long = 1_800_000_000_000L,
+    val hasher: CountingHasher = CountingHasher(),
+    val accounts: InMemoryAccountRepository = InMemoryAccountRepository(),
+    val sessionRepo: InMemorySessionRepository = InMemorySessionRepository(),
+    captcha: CaptchaVerifier = NoopCaptchaVerifier,
+    limiters: AuthLimiters = AuthLimiters(),
+) {
+    val access = AccessTokenService(TEST_JWT_SECRET)
+    val sessions = SessionService(sessionRepo, access, { now })
+    val guard = LoginGuard { now }
+    val totpRepo = InMemoryTotpRepository()
+    val totp = TotpService(totpRepo, TEST_OTP_KEY, { now })
+    val backupRepo = InMemoryBackupCodeRepository()
+    val backup = BackupCodeService(backupRepo, TEST_OTP_KEY, { now })
+    val notices = RecordingSecurityNotifier()
+    val mfa = MfaService(accounts, totp, backup, notices, hasher, access, { now })
+    val components =
+        AuthComponents(
+            AuthService(accounts, sessions, PasswordPolicy(FakePwned()), hasher, guard, captcha, mfa),
+            sessions,
+            access,
+            limiters,
+            { now },
+        )
+}

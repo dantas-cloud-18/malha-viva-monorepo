@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tracking_notification_channel">Compartilhamento de viagem</string>
+    <string name="tracking_notification_title">Compartilhando sua viagem</string>
+    <string name="tracking_notification_text">Sua localização está sendo usada de forma anônima.</string>
+    <string name="tracking_notification_stop">Parar</string>
+
+    <string name="tracking_off_title">Compartilhar minha viagem</string>
+    <string name="tracking_off_message">Ajude outros passageiros com a posição do trem. É opcional e você controla.</string>
+    <string name="tracking_off_action">Ativar compartilhamento</string>
+
+    <string name="tracking_blocked_title">Compartilhamento indisponível</string>
+    <string name="tracking_blocked_message">Por segurança, o compartilhamento de localização não está disponível para menores de 18 anos.</string>
+
+    <string name="tracking_disclosure_title">Antes de compartilhar sua localização</string>
+    <string name="tracking_disclosure_use">Usamos sua localização só durante uma viagem de trem, com uma notificação sempre visível. Você pode parar a qualquer momento pelo botão Parar.</string>
+    <string name="tracking_disclosure_anonymous">Os dados são enviados de forma anônima: nunca ficam ligados à sua conta.</string>
+    <string name="tracking_disclosure_delete">As posições brutas são apagadas em até 24 horas.</string>
+    <string name="tracking_disclosure_trim">O começo e o fim da viagem são cortados (cerca de 300 m), para proteger sua casa e seu trabalho.</string>
+    <string name="tracking_disclosure_optin">Nada disso começa antes de você tocar em Aceitar e continuar. Se recusar, o app continua funcionando normalmente.</string>
+    <string name="tracking_disclosure_accept">Aceitar e continuar</string>
+    <string name="tracking_disclosure_decline">Agora não</string>
+
+    <string name="tracking_preparing_title">Preparando</string>
+    <string name="tracking_preparing_message">Aguardando a permissão e o início do compartilhamento.</string>
+
+    <string name="tracking_active_title">Compartilhando sua viagem</string>
+    <string name="tracking_status_waiting">Aguardando o primeiro sinal de localização.</string>
+    <string name="tracking_status_sending">Coletando posições da viagem.</string>
+    <string name="tracking_status_paused">Pausado porque você está parado.</string>
+    <string name="tracking_active_stop">Parar</string>
+
+    <string name="tracking_stopped_title">Compartilhamento encerrado</string>
+    <string name="tracking_stopped_user">Você parou o compartilhamento.</string>
+    <string name="tracking_stopped_permission">Sem a permissão de localização não é possível compartilhar.</string>
+    <string name="tracking_stopped_no_route">Não encontramos o trajeto desta viagem.</string>
+    <string name="tracking_stopped_left_corridor">Você saiu do trajeto do trem.</string>
+    <string name="tracking_stopped_outside_station">Você ficou parado fora de uma estação por muito tempo.</string>
+    <string name="tracking_stopped_max_duration">A viagem passou do tempo máximo de compartilhamento.</string>
+    <string name="tracking_stopped_consent">O consentimento de localização foi retirado em Privacidade, então o compartilhamento parou e nada foi enviado.</string>
+    <string name="tracking_stopped_dismiss">Entendi</string>
+
+    <string name="tracking_consent_title">Consentimento necessário</string>
+    <string name="tracking_consent_message">Para compartilhar a viagem, ative o consentimento de localização em Conta, Privacidade. Nada é pedido ao sistema antes disso.</string>
+    <string name="tracking_consent_dismiss">Entendi</string>
+
+    <string name="tracking_background_action">Localização em segundo plano (opcional)</string>
+    <string name="tracking_background_title">Permitir localização em segundo plano?</string>
+    <string name="tracking_background_message">Por padrão o compartilhamento já continua com a tela apagada enquanto a notificação estiver visível. Esta permissão extra só serve para o app continuar a viagem se for fechado, e você pode negar sem perder nenhuma função. O uso segue anônimo e você pode retirá-la nas configurações do aparelho.</string>
+    <string name="tracking_background_allow">Continuar</string>
+    <string name="tracking_background_deny">Agora não</string>
+</resources>

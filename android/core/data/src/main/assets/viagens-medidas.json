@@ -1,0 +1,28 @@
+{
+  "versao": 1,
+  "descricao": "Tempos medidos em viagens reais de teste. Sem posições nem dados do aparelho.",
+  "viagens": [
+    {
+      "id": "v-08d8e02a",
+      "fonte": "PWA mv-e9f4d1dd7c",
+      "corredor": "santa-cruz",
+      "sentido": "SANTA_CRUZ_TO_CENTRAL",
+      "precisao_mediana_m": 26,
+      "paradas": [
+        { "estacao": "santa-cruz", "chegada": "2026-11-24T16:32:50-03:00", "saida": "2026-11-24T16:42:55-03:00", "parada_s": 605, "origem": true },
+        { "estacao": "tancredo-neves", "chegada": "2026-11-24T16:47:06-03:00", "saida": "2026-11-24T16:47:30-03:00", "parada_s": 24 },
+        { "estacao": "paciencia", "chegada": "2026-11-24T16:49:17-03:00", "saida": "2026-11-24T16:50:09-03:00", "parada_s": 52 },
+        { "estacao": "cosmos", "chegada": "2026-11-24T16:52:15-03:00", "saida": "2026-11-24T16:53:16-03:00", "parada_s": 61 },
+        { "estacao": "inhoaiba", "chegada": "2026-11-24T16:55:36-03:00", "saida": "2026-11-24T16:56:07-03:00", "parada_s": 31 },
+        { "estacao": "benjamim-do-monte", "chegada": "2026-11-24T16:58:14-03:00", "saida": "2026-11-24T16:58:50-03:00", "parada_s": 36 },
+        { "estacao": "campo-grande", "chegada": "2026-11-24T17:01:19-03:00", "saida": "2026-11-24T17:02:36-03:00", "parada_s": 77 },
+        { "estacao": "augusto-vasconcelos", "chegada": "2026-11-24T17:05:05-03:00", "saida": "2026-11-24T17:05:40-03:00", "parada_s": 35 },
+        { "estacao": "santissimo", "chegada": "2026-11-24T17:09:13-03:00", "saida": "2026-11-24T17:09:29-03:00", "parada_s": 16 },
+        { "estacao": "senador-camara", "chegada": "2026-11-24T17:12:38-03:00", "saida": "2026-11-24T17:14:11-03:00", "parada_s": 93 },
+        { "estacao": "bangu", "chegada": "2026-11-24T17:16:21-03:00", "saida": "2026-11-24T17:18:04-03:00", "parada_s": 103 },
+        { "estacao": "guilherme-da-silveira", "chegada": "2026-11-24T17:19:16-03:00", "saida": "2026-11-24T17:19:47-03:00", "parada_s": 31 },
+        { "estacao": "padre-miguel", "chegada": "2026-11-24T17:21:06-03:00", "saida": "2026-11-24T17:21:51-03:00", "parada_s": 45 }
+      ]
+    }
+  ]
+}

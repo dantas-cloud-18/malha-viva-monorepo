@@ -1,0 +1,11 @@
+# Piloto sem VM: roda db + backend no PC e expoe por um tunel temporario da Cloudflare
+# (https://<aleatorio>.trycloudflare.com, muda a cada reinicio). Uso:
+#   docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d db backend tunnel
+#   docker compose -f docker-compose.yml -f docker-compose.tunnel.yml logs tunnel   # mostra a URL
+services:
+  tunnel:
+    image: cloudflare/cloudflared:2025.11.1
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://backend:8080
+    depends_on:
+      - backend

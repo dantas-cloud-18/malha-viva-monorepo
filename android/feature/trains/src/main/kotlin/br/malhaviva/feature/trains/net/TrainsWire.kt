@@ -1,0 +1,100 @@
+package br.malhaviva.feature.trains.net
+
+import br.malhaviva.feature.tracking.net.CorridorParser
+import br.malhaviva.feature.trains.ConfidenceBand
+import br.malhaviva.feature.trains.CrowdingLevel
+import br.malhaviva.feature.trains.LineNetwork
+import br.malhaviva.feature.trains.LineStation
+import br.malhaviva.feature.trains.LiveTrain
+import br.malhaviva.feature.trains.Situation
+import org.json.JSONArray
+import org.json.JSONException
+import org.json.JSONObject
+
+/** JSON do contrato (`TrainState`, `TrainsSnapshot`, `CorridorNetwork`) para o modelo da feature. */
+object TrainsWire {
+    /** null se o JSON estiver quebrado ou com valores fora do contrato (uma linha ruim nao derruba o stream). */
+    fun parseTrain(json: String): LiveTrain? =
+        try {
+            train(JSONObject(json))
+        } catch (_: JSONException) {
+            null
+        }
+
+    fun parseSnapshot(json: String): List<LiveTrain>? =
+        try {
+            val array = JSONObject(json).getJSONArray("trains")
+            (0 until array.length()).mapNotNull { parseTrain(array.getJSONObject(it).toString()) }
+        } catch (_: JSONException) {
+            null
+        }
+
+    /** `StationCrowdingSnapshot` -> estacao para nivel; nivel nulo ou desconhecido vira "sem dados" (null). */
+    fun parseCrowding(json: String): Map<String, CrowdingLevel?>? =
+        try {
+            val array = JSONObject(json).getJSONArray("stations")
+            (0 until array.length()).associate {
+                val s = array.getJSONObject(it)
+                s.getString("station_id") to
+                    if (s.isNull("level")) null else CrowdingLevel.fromWire(s.getString("level"))
+            }
+        } catch (_: JSONException) {
+            null
+        }
+
+    fun parseNetwork(json: String): LineNetwork? =
+        try {
+            val route = CorridorParser.parse(json)
+            val names = stationNames(json)
+            route?.let { r ->
+                LineNetwork(
+                    stations = r.stationsAlong.map { (s, along) -> LineStation(s.id, names[s.id] ?: s.id, along) },
+                    lengthM = r.lengthM,
+                    shape = ShapeWire.parse(json),
+                )
+            }
+        } catch (_: JSONException) {
+            null
+        }
+
+    private fun stationNames(json: String): Map<String, String> {
+        val array = JSONObject(json).getJSONArray("stations")
+        return (0 until array.length()).associate {
+            val s = array.getJSONObject(it)
+            s.getString("station_id") to s.getString("name")
+        }
+    }
+
+    private fun etas(array: JSONArray?): Map<String, Int> =
+        if (array == null) {
+            emptyMap()
+        } else {
+            (0 until array.length()).associate {
+                val e = array.getJSONObject(it)
+                e.getString("station_id") to e.getInt("eta_s")
+            }
+        }
+
+    private fun train(o: JSONObject): LiveTrain? {
+        val along = o.getDouble("along_m")
+        val speed = o.getDouble("speed_mps")
+        val band = ConfidenceBand.fromWire(o.getString("confidence"))
+        val valid = along.isFinite() && speed.isFinite() && speed >= 0.0 && band != null
+        // campos novos sao opcionais: servidor antigo continua valendo (situacao = andando, sem ETA)
+        val situation = Situation.fromWire(o.optString("situation")) ?: Situation.Moving
+        return if (valid && band != null) {
+            LiveTrain(
+                id = o.getString("id"),
+                alongM = along,
+                speedMps = speed,
+                confidence = band,
+                updatedAtMs = o.getLong("updated_at_ms"),
+                situation = situation,
+                stationId = if (o.isNull("station_id")) null else o.optString("station_id").ifEmpty { null },
+                etasS = etas(o.optJSONArray("etas")),
+            )
+        } else {
+            null
+        }
+    }
+}

@@ -1,0 +1,8 @@
+included:
+  - App
+  - Widgets
+  - Packages
+excluded:
+  - Packages/MalhaVivaKit/.build
+trailing_comma:
+  mandatory_comma: true

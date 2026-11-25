@@ -1,0 +1,53 @@
+# Piloto em 1 VM Oracle Always Free (ARM aarch64). Todas as imagens sao multi-arch.
+# postgis/postgis:17-3.5 NAO publica arm64; imresamu/postgis e um build multi-arch equivalente.
+services:
+  db:
+    image: imresamu/postgis:17-3.5
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      retries: 10
+    # sem "ports": o banco so e acessivel pela rede interna do compose
+
+  backend:
+    build: ../../backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      MALHAVIVA_PEPPER: ${MALHAVIVA_PEPPER}
+      MALHAVIVA_JWT_SECRET: ${MALHAVIVA_JWT_SECRET}
+      MALHAVIVA_OTP_KEY: ${MALHAVIVA_OTP_KEY}
+      MALHAVIVA_DEV_CAPTCHA: ${MALHAVIVA_DEV_CAPTCHA}
+      MALHAVIVA_DEV_INTEGRITY: ${MALHAVIVA_DEV_INTEGRITY}
+      MALHAVIVA_MESSAGE_SENDER: ${MALHAVIVA_MESSAGE_SENDER}
+    # sem "ports": so o Caddy alcanca o backend
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    command: caddy reverse-proxy --from ${DOMAIN} --to backend:8080
+    volumes:
+      - caddy_data:/data
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  caddy_data:
