@@ -35,8 +35,8 @@ fun projectTrain(
         id = train.id,
         alongM = along,
         speedMps = train.speedMps,
-        signals = train.signals,
-        confidence = confidenceAt(train.confidence, age),
+        band = train.confidence,
+        confidence = confidenceAt(train.confidence.level, age),
         freshness = freshness,
         atStationId = atStation?.id,
     )

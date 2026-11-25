@@ -9,13 +9,31 @@ enum class Direction(
     SantaCruzToCentral("SANTA_CRUZ_TO_CENTRAL", -1),
 }
 
+private const val LEVEL_LOW = 0.3
+private const val LEVEL_MEDIUM = 0.6
+private const val LEVEL_HIGH = 0.9
+
+/** Faixa de confianca do contrato (`low|medium|high`); [level] e so a intensidade exibida no anel. */
+enum class ConfidenceBand(
+    val wire: String,
+    val level: Double,
+) {
+    Low("low", LEVEL_LOW),
+    Medium("medium", LEVEL_MEDIUM),
+    High("high", LEVEL_HIGH),
+    ;
+
+    companion object {
+        fun fromWire(wire: String): ConfidenceBand? = entries.firstOrNull { it.wire == wire }
+    }
+}
+
 /** `TrainState` do contrato. O id e efemero e nao identifica ninguem. */
 data class LiveTrain(
     val id: String,
     val alongM: Double,
     val speedMps: Double,
-    val signals: Int,
-    val confidence: Double,
+    val confidence: ConfidenceBand,
     val updatedAtMs: Long,
 )
 
@@ -60,7 +78,7 @@ data class TrainView(
     val id: String,
     val alongM: Double,
     val speedMps: Double,
-    val signals: Int,
+    val band: ConfidenceBand,
     val confidence: Double,
     val freshness: Freshness,
     val atStationId: String?,

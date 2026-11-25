@@ -20,8 +20,8 @@ class TrainsProjectionTest {
     private fun train(
         along: Double,
         speed: Double = 10.0,
-        confidence: Double = 0.9,
-    ) = TrackedTrain(LiveTrain("t", along, speed, 3, confidence, 1L), receivedAtMs = 1_000L)
+        confidence: ConfidenceBand = ConfidenceBand.High,
+    ) = TrackedTrain(LiveTrain("t", along, speed, confidence, 1L), receivedAtMs = 1_000L)
 
     private fun view(
         tracked: TrackedTrain,
@@ -83,9 +83,9 @@ class TrainsProjectionTest {
 
     @Test
     fun `confidence holds while fresh, decays while estimated and is zero without signal`() {
-        val t = train(5_000.0, confidence = 1.0)
-        assertEquals(1.0, view(t, Direction.CentralToSantaCruz, 15_000).confidence, 1e-9)
-        assertEquals(0.5, view(t, Direction.CentralToSantaCruz, 37_500).confidence, 1e-9)
+        val t = train(5_000.0)
+        assertEquals(0.9, view(t, Direction.CentralToSantaCruz, 15_000).confidence, 1e-9)
+        assertEquals(0.45, view(t, Direction.CentralToSantaCruz, 37_500).confidence, 1e-9)
         val gone = view(t, Direction.CentralToSantaCruz, 61_000)
         assertEquals(0.0, gone.confidence, 1e-9)
         assertEquals(Freshness.NoSignal, gone.freshness)
@@ -119,8 +119,8 @@ class TrainsProjectionTest {
     fun `eta uses the nearest approaching moving train`() {
         val views =
             listOf(
-                TrainView("a", 19_400.0, 10.0, 1, 1.0, Freshness.Live, null),
-                TrainView("b", 5_000.0, 10.0, 1, 1.0, Freshness.Live, null),
+                TrainView("a", 19_400.0, 10.0, ConfidenceBand.High, 1.0, Freshness.Live, null),
+                TrainView("b", 5_000.0, 10.0, ConfidenceBand.High, 1.0, Freshness.Live, null),
             )
         val bangu = line.stations[2]
         // a esta a 600 m a 10 m/s = 60 s -> 1 min; b esta a 15 km
@@ -134,10 +134,10 @@ class TrainsProjectionTest {
         val central = line.stations[0]
         val views =
             listOf(
-                TrainView("away", 5_000.0, 10.0, 1, 1.0, Freshness.Live, null),
-                TrainView("slow", 5_000.0, 0.2, 1, 1.0, Freshness.Live, null),
-                TrainView("dwell", 5_000.0, 10.0, 1, 1.0, Freshness.Live, "M"),
-                TrainView("lost", 5_000.0, 10.0, 1, 0.0, Freshness.NoSignal, null),
+                TrainView("away", 5_000.0, 10.0, ConfidenceBand.High, 1.0, Freshness.Live, null),
+                TrainView("slow", 5_000.0, 0.2, ConfidenceBand.High, 1.0, Freshness.Live, null),
+                TrainView("dwell", 5_000.0, 10.0, ConfidenceBand.High, 1.0, Freshness.Live, "M"),
+                TrainView("lost", 5_000.0, 10.0, ConfidenceBand.Low, 0.0, Freshness.NoSignal, null),
             )
         // Central -> Santa Cruz: todos estao alem da Central, afastando-se
         assertNull(etaMinutes(views, central, Direction.CentralToSantaCruz))
@@ -147,15 +147,15 @@ class TrainsProjectionTest {
 
     @Test
     fun `eta rounds up and gives up beyond 99 minutes`() {
-        val near = TrainView("a", 19_990.0, 10.0, 1, 1.0, Freshness.Live, null)
+        val near = TrainView("a", 19_990.0, 10.0, ConfidenceBand.High, 1.0, Freshness.Live, null)
         // 10 010 m a 10 m/s = 1 001 s = 16,7 min -> 17
         assertEquals(17, etaMinutes(listOf(near), line.stations[3], Direction.CentralToSantaCruz))
-        val far = TrainView("f", 0.0, 1.0, 1, 1.0, Freshness.Live, null)
+        val far = TrainView("f", 0.0, 1.0, ConfidenceBand.High, 1.0, Freshness.Live, null)
         // 30 km a 1 m/s = 500 min
         assertNull(etaMinutes(listOf(far), line.stations[3], Direction.CentralToSantaCruz))
-        val soon = TrainView("s", 29_999.0, 10.0, 1, 1.0, Freshness.Live, null)
+        val soon = TrainView("s", 29_999.0, 10.0, ConfidenceBand.High, 1.0, Freshness.Live, null)
         assertEquals(1, etaMinutes(listOf(soon), line.stations[3], Direction.CentralToSantaCruz))
-        val there = TrainView("h", 30_000.0, 10.0, 1, 1.0, Freshness.Live, null)
+        val there = TrainView("h", 30_000.0, 10.0, ConfidenceBand.High, 1.0, Freshness.Live, null)
         assertEquals(0, etaMinutes(listOf(there), line.stations[3], Direction.CentralToSantaCruz))
     }
 }

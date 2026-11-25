@@ -42,12 +42,10 @@ import br.malhaviva.core.designsystem.TimelineStop
 import br.malhaviva.core.designsystem.TrainMarker
 import br.malhaviva.core.designsystem.TrainStatus
 import kotlin.math.abs
-import kotlin.math.roundToInt
 
 /** Altura de cada linha do [LineTimeline] (fixa no design system); os trens sao posicionados sobre ela. */
 private val ROW_HEIGHT = 48.dp
 private val MARKER_SIZE = 28.dp
-private const val PERCENT = 100
 
 /** Aba Trens: liga o ciclo de vida da tela ao ViewModel (so conecta com a tela visivel). */
 @Composable
@@ -206,14 +204,13 @@ private fun TrainList(
     Column(Modifier.padding(MalhaVivaSpacing.l)) {
         Text(stringResource(R.string.trains_list_title), style = MaterialTheme.typography.titleMedium)
         views.forEach { view ->
-            val percent = (view.confidence * PERCENT).roundToInt()
             Row(
                 Modifier.fillMaxWidth().padding(top = MalhaVivaSpacing.m),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 ConfidenceRing(
                     confidence = view.confidence.toFloat(),
-                    description = stringResource(R.string.trains_item_confidence, percent),
+                    description = confidenceLabel(view.band),
                     modifier = Modifier.size(24.dp),
                 )
                 Column(Modifier.padding(start = MalhaVivaSpacing.m)) {

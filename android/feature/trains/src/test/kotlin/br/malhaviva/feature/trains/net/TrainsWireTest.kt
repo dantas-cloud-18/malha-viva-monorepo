@@ -1,5 +1,6 @@
 package br.malhaviva.feature.trains.net
 
+import br.malhaviva.feature.trains.ConfidenceBand
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -7,7 +8,7 @@ import org.junit.Test
 
 class TrainsWireTest {
     private val ok =
-        """{"id":"t1","along_m":12345.6,"speed_mps":11.5,"signals":3,"confidence":0.8,"updated_at_ms":1700000000000}"""
+        """{"id":"t1","along_m":12345.6,"speed_mps":11.5,"confidence":"medium","updated_at_ms":1700000000000}"""
 
     @Test
     fun `parses a TrainState from the contract`() {
@@ -15,7 +16,7 @@ class TrainsWireTest {
         assertEquals("t1", t.id)
         assertEquals(12345.6, t.alongM, 1e-9)
         assertEquals(11.5, t.speedMps, 1e-9)
-        assertEquals(3, t.signals)
+        assertEquals(ConfidenceBand.Medium, t.confidence)
         assertEquals(1700000000000L, t.updatedAtMs)
     }
 
@@ -24,12 +25,15 @@ class TrainsWireTest {
         assertNull(TrainsWire.parseTrain("not json"))
         assertNull(TrainsWire.parseTrain("""{"id":"x"}"""))
         assertNull(TrainsWire.parseTrain(ok.replace("11.5", "-1")))
-        assertNull(TrainsWire.parseTrain(ok.replace("\"signals\":3", "\"signals\":0")))
+        assertNull(TrainsWire.parseTrain(ok.replace("medium", "extreme")))
     }
 
     @Test
-    fun `confidence is clamped into 0 to 1`() {
-        assertEquals(1.0, requireNotNull(TrainsWire.parseTrain(ok.replace("0.8", "7"))).confidence, 0.0)
+    fun `confidence band maps low medium high and ignores any signals count`() {
+        ConfidenceBand.entries.forEach {
+            val json = ok.replace("medium", it.wire).replace("\"id\"", "\"signals\":7,\"id\"")
+            assertEquals(it, requireNotNull(TrainsWire.parseTrain(json)).confidence)
+        }
     }
 
     @Test

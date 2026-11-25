@@ -1,6 +1,7 @@
 package br.malhaviva.feature.trains.net
 
 import br.malhaviva.feature.tracking.net.CorridorParser
+import br.malhaviva.feature.trains.ConfidenceBand
 import br.malhaviva.feature.trains.LineNetwork
 import br.malhaviva.feature.trains.LineStation
 import br.malhaviva.feature.trains.LiveTrain
@@ -50,14 +51,14 @@ object TrainsWire {
     private fun train(o: JSONObject): LiveTrain? {
         val along = o.getDouble("along_m")
         val speed = o.getDouble("speed_mps")
-        val valid = along.isFinite() && speed.isFinite() && speed >= 0.0 && o.getInt("signals") >= 1
-        return if (valid) {
+        val band = ConfidenceBand.fromWire(o.getString("confidence"))
+        val valid = along.isFinite() && speed.isFinite() && speed >= 0.0 && band != null
+        return if (valid && band != null) {
             LiveTrain(
                 id = o.getString("id"),
                 alongM = along,
                 speedMps = speed,
-                signals = o.getInt("signals"),
-                confidence = o.getDouble("confidence").coerceIn(0.0, 1.0),
+                confidence = band,
                 updatedAtMs = o.getLong("updated_at_ms"),
             )
         } else {

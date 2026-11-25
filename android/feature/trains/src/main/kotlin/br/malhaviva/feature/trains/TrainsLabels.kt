@@ -24,6 +24,16 @@ internal fun shortDirectionLabel(direction: Direction): String =
     )
 
 @Composable
+internal fun confidenceLabel(band: ConfidenceBand): String =
+    stringResource(
+        when (band) {
+            ConfidenceBand.Low -> R.string.trains_item_confidence_low
+            ConfidenceBand.Medium -> R.string.trains_item_confidence_medium
+            ConfidenceBand.High -> R.string.trains_item_confidence_high
+        },
+    )
+
+@Composable
 internal fun healthLabel(health: LineHealth): String =
     stringResource(
         when (health) {

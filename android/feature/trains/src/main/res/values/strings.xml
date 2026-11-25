@@ -37,6 +37,8 @@
     <string name="trains_item_live">ao vivo</string>
     <string name="trains_item_estimated">estimado</string>
     <string name="trains_item_no_signal">sem sinal</string>
-    <string name="trains_item_confidence">Confiança %1$d%%</string>
+    <string name="trains_item_confidence_low">Confiança baixa</string>
+    <string name="trains_item_confidence_medium">Confiança média</string>
+    <string name="trains_item_confidence_high">Confiança alta</string>
     <string name="trains_marker_description">Trem, %1$s, %2$s</string>
 </resources>

@@ -23,7 +23,7 @@ class LiveTrainsClientTest {
     private fun trainJson(
         id: String,
         along: Double = 1000.0,
-    ) = """{"id":"$id","along_m":$along,"speed_mps":10.0,"signals":2,"confidence":0.9,"updated_at_ms":5}"""
+    ) = """{"id":"$id","along_m":$along,"speed_mps":10.0,"confidence":"high","updated_at_ms":5}"""
 
     private fun sse(
         id: String,

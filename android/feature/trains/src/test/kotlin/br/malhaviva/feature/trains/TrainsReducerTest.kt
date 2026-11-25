@@ -14,7 +14,7 @@ class TrainsReducerTest {
         id: String,
         updatedAt: Long = 1L,
         along: Double = 100.0,
-    ) = LiveTrain(id, along, 10.0, 2, 0.9, updatedAt)
+    ) = LiveTrain(id, along, 10.0, ConfidenceBand.High, updatedAt)
 
     private fun run(
         vararg intents: TrainsIntent,
