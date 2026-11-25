@@ -51,3 +51,10 @@ detekt {
     buildUponDefaultConfig = true
     config.setFrom(file("config/detekt.yml"))
 }
+
+// ktlint traz logback 1.3.x vulneravel so na ferramenta; alinha com a versao do app.
+configurations.matching { it.name == "ktlint" }.configureEach {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "ch.qos.logback") useVersion(libs.versions.logback.get())
+    }
+}
