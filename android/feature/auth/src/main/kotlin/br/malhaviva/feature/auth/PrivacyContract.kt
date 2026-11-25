@@ -24,6 +24,8 @@ data class PrivacyState(
     val marketing: Boolean = false,
     val needsReconsent: Boolean = false,
     val marketingForbidden: Boolean = false,
+    /** Menor de 18 anos ou faixa ainda desconhecida: o interruptor de localizacao fica desligado e bloqueado. */
+    val locationForbidden: Boolean = false,
     val history: List<ConsentEvent> = emptyList(),
     val newHandle: String = "",
     val password: String = "",
@@ -46,6 +48,10 @@ sealed interface PrivacyIntent {
     data class Toggle(
         val purpose: ConsentPurpose,
         val on: Boolean,
+    ) : PrivacyIntent
+
+    data class SharingBlockedChanged(
+        val blocked: Boolean,
     ) : PrivacyIntent
 
     data object ShowHistory : PrivacyIntent
@@ -168,6 +174,7 @@ private fun reducePrivacyResult(
         is PrivacyIntent.Exported ->
             state.copy(busy = false, exportJson = intent.json, message = AuthMessage.ExportReady)
         PrivacyIntent.Deleted -> PrivacyState(deleted = true)
+        is PrivacyIntent.SharingBlockedChanged -> state.copy(locationForbidden = intent.blocked)
         is PrivacyIntent.Failed -> reducePrivacyFailure(state, intent)
         else -> state
     }

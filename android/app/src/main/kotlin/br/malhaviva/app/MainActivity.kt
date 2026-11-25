@@ -43,6 +43,8 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var consent: LocationConsentStore
 
+    @Inject lateinit var sharingBlock: SharingBlockStore
+
     @Inject lateinit var liveTrains: LiveTrainsClient
 
     // Cada ViewModel e criado sob demanda pela fabrica (os modulos de feature nao usam Hilt).
@@ -54,13 +56,12 @@ class MainActivity : ComponentActivity() {
     private val contactsVm by viewModels<ContactsViewModel> { factory { ContactsViewModel(session, account) } }
     private val parentalVm by viewModels<ParentalViewModel> { factory { ParentalViewModel(parental) } }
     private val privacyVm by viewModels<PrivacyViewModel> {
-        factory { PrivacyViewModel(session, privacyApi, consent) }
+        factory { PrivacyViewModel(session, privacyApi, consent, sharingBlock.blocked) }
     }
 
     private val trains by viewModels<TrainsViewModel> { factory { TrainsViewModel(liveTrains) } }
 
-    // TODO(fase 6): sharingBlocked deve vir da faixa etaria do perfil (menor de 18 anos); hoje o servidor decide.
-    private val tracking by viewModels<TrackingViewModel> { factory { TrackingViewModel() } }
+    private val tracking by viewModels<TrackingViewModel> { factory { TrackingViewModel(sharingBlock.blocked) } }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -73,7 +74,10 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         // Pega revogacoes feitas em outro aparelho antes de qualquer viagem comecar.
-        lifecycleScope.launch { consent.refresh() }
+        lifecycleScope.launch {
+            consent.refresh()
+            sharingBlock.refresh()
+        }
     }
 
     private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) =

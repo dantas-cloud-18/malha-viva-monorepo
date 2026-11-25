@@ -55,7 +55,7 @@ fun TrackingScreen(
     Column(modifier) {
         TrackingContent(
             state = state,
-            sharingBlocked = viewModel.sharingBlocked,
+            sharingBlocked = viewModel.sharingBlocked.collectAsState().value,
             onIntent = { intent ->
                 viewModel.onIntent(intent)
                 if (intent == TrackingIntent.StopRequested) TrackingService.stop(context)

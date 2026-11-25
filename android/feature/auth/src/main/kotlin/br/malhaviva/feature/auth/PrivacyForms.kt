@@ -71,9 +71,11 @@ private fun PrivacyMain(
     Hint(stringResource(R.string.auth_privacy_intro))
     ConsentRow(
         stringResource(R.string.auth_privacy_location_title),
-        stringResource(R.string.auth_privacy_location_hint),
-        state.location,
-        !state.busy,
+        stringResource(
+            if (state.locationForbidden) R.string.auth_privacy_location_minor else R.string.auth_privacy_location_hint,
+        ),
+        state.location && !state.locationForbidden,
+        !state.busy && !state.locationForbidden,
     ) { onIntent(PrivacyIntent.Toggle(ConsentPurpose.Location, it)) }
     // Menor de 18 anos nunca recebe marketing: o interruptor fica desligado e explicado.
     ConsentRow(

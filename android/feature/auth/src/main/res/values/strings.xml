@@ -137,6 +137,7 @@
     <string name="auth_privacy_location_hint">Ajuda a mostrar onde os trens estão. Desligar não afeta sua conta nem o resto do app.</string>
     <string name="auth_privacy_marketing_title">Receber novidades e promoções</string>
     <string name="auth_privacy_marketing_hint">Mensagens opcionais, separadas do uso do app.</string>
+    <string name="auth_privacy_location_minor">O compartilhamento de localização não está disponível para menores de 18 anos.</string>
     <string name="auth_privacy_marketing_minor">Não enviamos promoções para menores de 18 anos.</string>
     <string name="auth_privacy_reconsent">A política de privacidade mudou. Ligue de novo as opções que você quer manter.</string>
     <string name="auth_privacy_history">Histórico dos meus consentimentos</string>

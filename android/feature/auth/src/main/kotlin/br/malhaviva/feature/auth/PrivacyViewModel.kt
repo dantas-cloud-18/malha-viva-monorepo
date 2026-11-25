@@ -4,6 +4,8 @@ import androidx.lifecycle.viewModelScope
 import br.malhaviva.core.ui.MviViewModel
 import br.malhaviva.feature.auth.net.ApiResult
 import br.malhaviva.feature.auth.net.PrivacyApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /** Avisado quando o servidor confirma o estado do consentimento de localizacao (carga ou alteracao). */
@@ -15,7 +17,12 @@ class PrivacyViewModel(
     private val session: AuthSession,
     private val privacy: PrivacyApi,
     private val locationListener: LocationConsentListener = LocationConsentListener {},
-) : MviViewModel<PrivacyState, PrivacyIntent>(PrivacyState()) {
+    sharingBlocked: StateFlow<Boolean> = MutableStateFlow(false),
+) : MviViewModel<PrivacyState, PrivacyIntent>(PrivacyState(locationForbidden = sharingBlocked.value)) {
+    init {
+        viewModelScope.launch { sharingBlocked.collect { onIntent(PrivacyIntent.SharingBlockedChanged(it)) } }
+    }
+
     override fun reduce(
         state: PrivacyState,
         intent: PrivacyIntent,

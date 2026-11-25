@@ -3,6 +3,7 @@ package br.malhaviva.app.di
 import android.content.Context
 import br.malhaviva.app.BuildConfig
 import br.malhaviva.app.LocationConsentStore
+import br.malhaviva.app.SharingBlockStore
 import br.malhaviva.app.captchaTokenProvider
 import br.malhaviva.app.integrityTokenProvider
 import br.malhaviva.core.data.net.HttpTransport
@@ -92,6 +93,20 @@ object TrackingModule {
         LocationConsentStore(
             session.state,
             { (session.authed { privacy.getConsents(it) } as? ApiResult.Ok)?.value?.isLocationGranted() },
+            scope,
+        )
+
+    /** Faixa etaria da conta (`GET /me`) decide o bloqueio de compartilhamento; falha fechada. */
+    @Provides
+    @Singleton
+    fun sharingBlock(
+        session: AuthSession,
+        privacy: PrivacyApi,
+        scope: CoroutineScope,
+    ): SharingBlockStore =
+        SharingBlockStore(
+            session.state,
+            { (session.authed { privacy.getAccount(it) } as? ApiResult.Ok)?.value?.ageBracket },
             scope,
         )
 

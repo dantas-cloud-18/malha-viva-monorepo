@@ -33,6 +33,10 @@ class PrivacyApi(
     suspend fun exportData(accessToken: String): ApiResult<String> =
         client.call("GET", "/me/export", accessToken, { JSONObject(it).toString(2) })
 
+    /** Conta da sessao; fonte da faixa etaria (`age_bracket`) usada para bloquear o compartilhamento. */
+    suspend fun getAccount(accessToken: String): ApiResult<AccountInfo> =
+        client.call("GET", "/me", accessToken, obj(::accountInfo))
+
     /** Corrige o @nome; devolve a conta como ficou gravada. */
     suspend fun correctHandle(
         accessToken: String,
@@ -42,9 +46,7 @@ class PrivacyApi(
             "PATCH",
             "/me",
             accessToken,
-            obj {
-                AccountInfo(it.getString("handle"), it.optString("age_bracket").ifEmpty { null })
-            },
+            obj(::accountInfo),
         ) { put("handle", handle) }
 
     suspend fun deleteAccount(
@@ -52,6 +54,9 @@ class PrivacyApi(
         currentPassword: String,
     ): ApiResult<Unit> = client.call("DELETE", "/me", accessToken, { }) { put("current_password", currentPassword) }
 }
+
+private fun accountInfo(json: JSONObject) =
+    AccountInfo(json.getString("handle"), json.optString("age_bracket").ifEmpty { null })
 
 private fun consentList(json: JSONObject): ConsentList {
     val array = json.getJSONArray("consents")

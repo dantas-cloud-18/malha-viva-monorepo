@@ -171,4 +171,28 @@ class PrivacyViewModelTest {
             assertEquals("", done.password)
             assertEquals(SessionState.LoggedOut, env.session.state.value)
         }
+
+    @Test
+    fun `blocked sharing disables the location switch and follows the profile`() =
+        runTest {
+            env.signIn()
+            t.on("GET /me/consents", json(200, none))
+            val blocked = kotlinx.coroutines.flow.MutableStateFlow(true)
+            val vm = PrivacyViewModel(env.session, env.privacy, sharingBlocked = blocked)
+            assertTrue(vm.state.value.locationForbidden)
+            blocked.value = false
+            assertFalse(vm.state.value.locationForbidden)
+        }
+
+    @Test
+    fun `get account reads the age bracket from me`() =
+        runTest {
+            env.signIn()
+            t.on("GET /me", json(200, """{"handle":"@ana","age_bracket":"teen_12_17","status":"active"}"""))
+            val result = env.session.authed { env.privacy.getAccount(it) }
+            assertEquals(
+                "teen_12_17",
+                (result as br.malhaviva.feature.auth.net.ApiResult.Ok).value.ageBracket,
+            )
+        }
 }

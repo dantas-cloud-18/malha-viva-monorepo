@@ -118,7 +118,7 @@ class TrackingReducerTest {
         runTest {
             val viewModel =
                 TrackingViewModel(
-                    sharingBlocked = true,
+                    sharingBlocked = MutableStateFlow(true),
                     serviceEvents = MutableSharedFlow(),
                     consent = MutableStateFlow(true),
                 )
