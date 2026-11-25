@@ -24,7 +24,8 @@ if [ ! -f .env ]; then
   sed -i "s|^DB_PASSWORD=.*|DB_PASSWORD=$(openssl rand -hex 24)|" .env
 fi
 for k in MALHAVIVA_PEPPER MALHAVIVA_JWT_SECRET MALHAVIVA_OTP_KEY; do
-  grep -q "^$k=.\+" .env || sed -i "s|^$k=.*|$k=$(openssl rand -base64 48 | tr -d '\n/|&')|" .env
+  # '#' como delimitador: nao aparece em base64 (o backend exige base64 valido, entao '/' e '+' ficam)
+  grep -q "^$k=.\+" .env || sed -i "s#^$k=.*#$k=$(openssl rand -base64 48 | tr -d '\n')#" .env
 done
 chmod 600 .env
 
