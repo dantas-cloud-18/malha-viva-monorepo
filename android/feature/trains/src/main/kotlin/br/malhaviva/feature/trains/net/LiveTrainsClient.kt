@@ -2,6 +2,7 @@ package br.malhaviva.feature.trains.net
 
 import br.malhaviva.core.data.net.HttpRequest
 import br.malhaviva.core.data.net.HttpTransport
+import br.malhaviva.feature.trains.CrowdingLevel
 import br.malhaviva.feature.trains.Direction
 import br.malhaviva.feature.trains.LineNetwork
 import br.malhaviva.feature.trains.LiveTrain
@@ -40,6 +41,9 @@ interface TrainsSource {
 
     /** Malha do corredor; null se falhar. */
     suspend fun network(): LineNetwork?
+
+    /** Lotacao por estacao (polling); null se falhar. */
+    suspend fun crowding(direction: Direction): Map<String, CrowdingLevel?>?
 }
 
 /**
@@ -91,6 +95,10 @@ class LiveTrainsClient(
 
     override suspend fun network(): LineNetwork? =
         get("$base/v1/network/corridors/$CORRIDOR")?.let(TrainsWire::parseNetwork)
+
+    override suspend fun crowding(direction: Direction): Map<String, CrowdingLevel?>? =
+        get("$base/v1/corridors/$CORRIDOR/stations/crowding?direction=${direction.wire}")
+            ?.let(TrainsWire::parseCrowding)
 
     private suspend fun ProducerScope<TrainsFeed>.emit(event: SseEvent) {
         if (event.type == TRAIN_EVENT) TrainsWire.parseTrain(event.data)?.let { send(TrainsFeed.Train(it)) }

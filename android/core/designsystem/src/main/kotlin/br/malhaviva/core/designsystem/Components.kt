@@ -128,6 +128,7 @@ data class TimelineStop(
     val name: String,
     val time: String,
     val state: StopState,
+    val detail: String? = null,
 )
 
 @Composable
@@ -161,7 +162,10 @@ private fun TimelineRow(
             Modifier
                 .fillMaxWidth()
                 .height(48.dp)
-                .clearAndSetSemantics { contentDescription = "${stop.name}, ${stop.time}, $stateText" },
+                .clearAndSetSemantics {
+                    contentDescription =
+                        listOfNotNull(stop.name, stop.time, stateText, stop.detail).joinToString(", ")
+                },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Canvas(Modifier.width(32.dp).height(48.dp)) {
@@ -179,12 +183,14 @@ private fun TimelineRow(
                 }
             }
         }
-        Text(
-            stop.name,
-            style = MaterialTheme.typography.titleMedium,
-            color = if (current) colors.primary else colors.text,
-            modifier = Modifier.weight(1f),
-        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                stop.name,
+                style = MaterialTheme.typography.titleMedium,
+                color = if (current) colors.primary else colors.text,
+            )
+            stop.detail?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = colors.textMuted) }
+        }
         Text(stop.time, style = TimeTextStyle.copy(fontSize = 17.sp), color = colors.textMuted)
         Box(Modifier.width(MalhaVivaSpacing.l))
     }

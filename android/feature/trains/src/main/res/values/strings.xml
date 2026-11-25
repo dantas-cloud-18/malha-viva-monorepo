@@ -40,5 +40,9 @@
     <string name="trains_item_confidence_low">Confiança baixa</string>
     <string name="trains_item_confidence_medium">Confiança média</string>
     <string name="trains_item_confidence_high">Confiança alta</string>
+    <string name="trains_crowding_low">Lotação: baixa</string>
+    <string name="trains_crowding_medium">Lotação: média</string>
+    <string name="trains_crowding_high">Lotação: alta</string>
+    <string name="trains_crowding_none">Lotação: sem dados</string>
     <string name="trains_marker_description">Trem, %1$s, %2$s</string>
 </resources>

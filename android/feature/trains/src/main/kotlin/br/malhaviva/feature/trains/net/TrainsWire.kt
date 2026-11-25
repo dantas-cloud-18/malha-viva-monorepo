@@ -2,6 +2,7 @@ package br.malhaviva.feature.trains.net
 
 import br.malhaviva.feature.tracking.net.CorridorParser
 import br.malhaviva.feature.trains.ConfidenceBand
+import br.malhaviva.feature.trains.CrowdingLevel
 import br.malhaviva.feature.trains.LineNetwork
 import br.malhaviva.feature.trains.LineStation
 import br.malhaviva.feature.trains.LiveTrain
@@ -22,6 +23,19 @@ object TrainsWire {
         try {
             val array = JSONObject(json).getJSONArray("trains")
             (0 until array.length()).mapNotNull { parseTrain(array.getJSONObject(it).toString()) }
+        } catch (_: JSONException) {
+            null
+        }
+
+    /** `StationCrowdingSnapshot` -> estacao para nivel; nivel nulo ou desconhecido vira "sem dados" (null). */
+    fun parseCrowding(json: String): Map<String, CrowdingLevel?>? =
+        try {
+            val array = JSONObject(json).getJSONArray("stations")
+            (0 until array.length()).associate {
+                val s = array.getJSONObject(it)
+                s.getString("station_id") to
+                    if (s.isNull("level")) null else CrowdingLevel.fromWire(s.getString("level"))
+            }
         } catch (_: JSONException) {
             null
         }

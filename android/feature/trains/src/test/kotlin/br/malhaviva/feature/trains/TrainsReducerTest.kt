@@ -134,4 +134,14 @@ class TrainsReducerTest {
         assertEquals(LineHealth.NoSignal, health(run(TrainsIntent.StreamLost(1), from = base)))
         assertEquals(LineHealth.Connecting, health(run(TrainsIntent.Connecting)))
     }
+
+    @Test
+    fun `crowding is replaced as a whole and cleared on direction change`() {
+        val s = run(TrainsIntent.CrowdingLoaded(mapOf("C" to CrowdingLevel.High, "S" to null)))
+        assertEquals(CrowdingLevel.High, s.crowding["C"])
+        val replaced = reduceTrains(s, TrainsIntent.CrowdingLoaded(mapOf("S" to CrowdingLevel.Low)))
+        assertEquals(mapOf<String, CrowdingLevel?>("S" to CrowdingLevel.Low), replaced.crowding)
+        assertTrue(reduceTrains(s, TrainsIntent.DirectionSelected(Direction.SantaCruzToCentral)).crowding.isEmpty())
+        assertTrue(reduceTrains(s, TrainsIntent.CrowdingLoaded(emptyMap())).crowding.isEmpty())
+    }
 }

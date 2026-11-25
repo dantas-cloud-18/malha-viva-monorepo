@@ -66,6 +66,7 @@ object TrainsPolicy {
     const val STATION_EPS_M = 1.0
     const val LOW_CONFIDENCE = 0.5
     const val TICK_MS = 1_000L
+    const val CROWDING_POLL_MS = 15_000L
     const val MS_PER_S = 1000.0
     const val S_PER_MIN = 60.0
     const val MAX_ETA_MIN = 99
@@ -83,3 +84,17 @@ data class TrainView(
     val freshness: Freshness,
     val atStationId: String?,
 )
+
+/** Faixa grossa de lotacao do contrato (`low|medium|high`). Sem dados = ausente do mapa ou nulo. */
+enum class CrowdingLevel(
+    val wire: String,
+) {
+    Low("low"),
+    Medium("medium"),
+    High("high"),
+    ;
+
+    companion object {
+        fun fromWire(wire: String): CrowdingLevel? = entries.firstOrNull { it.wire == wire }
+    }
+}

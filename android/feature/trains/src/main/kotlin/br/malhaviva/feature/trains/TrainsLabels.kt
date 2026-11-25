@@ -34,6 +34,17 @@ internal fun confidenceLabel(band: ConfidenceBand): String =
     )
 
 @Composable
+internal fun crowdingLabel(level: CrowdingLevel?): String =
+    stringResource(
+        when (level) {
+            CrowdingLevel.Low -> R.string.trains_crowding_low
+            CrowdingLevel.Medium -> R.string.trains_crowding_medium
+            CrowdingLevel.High -> R.string.trains_crowding_high
+            null -> R.string.trains_crowding_none
+        },
+    )
+
+@Composable
 internal fun healthLabel(health: LineHealth): String =
     stringResource(
         when (health) {

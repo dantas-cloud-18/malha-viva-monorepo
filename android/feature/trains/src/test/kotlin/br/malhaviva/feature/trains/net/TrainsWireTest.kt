@@ -1,6 +1,7 @@
 package br.malhaviva.feature.trains.net
 
 import br.malhaviva.feature.trains.ConfidenceBand
+import br.malhaviva.feature.trains.CrowdingLevel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -44,5 +45,23 @@ class TrainsWireTest {
         val good = """{"corridor":"RAMAL_SANTA_CRUZ","direction":"CENTRAL_TO_SANTA_CRUZ","trains":[$ok]}"""
         assertEquals(1, requireNotNull(TrainsWire.parseSnapshot(good)).size)
         assertNotNull(TrainsWire.parseSnapshot("""{"trains":[]}"""))
+    }
+
+    @Test
+    fun `crowding keeps levels, null and unknown values become no data, counts are ignored`() {
+        val json =
+            """{"corridor":"RAMAL_SANTA_CRUZ","direction":"CENTRAL_TO_SANTA_CRUZ","stations":[
+            {"station_id":"a","level":"low"},{"station_id":"b","level":"high"},
+            {"station_id":"c","level":null},{"station_id":"d","level":"packed"},
+            {"station_id":"e","level":"medium","count":7}]}"""
+        val map = requireNotNull(TrainsWire.parseCrowding(json))
+        assertEquals(CrowdingLevel.Low, map["a"])
+        assertEquals(CrowdingLevel.High, map["b"])
+        assertEquals(CrowdingLevel.Medium, map["e"])
+        assertEquals(setOf("a", "b", "c", "d", "e"), map.keys)
+        assertNull(map["c"])
+        assertNull(map["d"])
+        assertNull(TrainsWire.parseCrowding("not json"))
+        assertNull(TrainsWire.parseCrowding("""{"corridor":"X"}"""))
     }
 }

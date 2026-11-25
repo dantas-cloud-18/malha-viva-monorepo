@@ -49,6 +49,7 @@ class TrainsViewModel(
             viewModelScope.launch {
                 launch { tick() }
                 launch { loadNetwork() }
+                launch { pollCrowding() }
                 source.feed(state.value.direction).collect { onIntent(it.toIntent()) }
             }
     }
@@ -63,6 +64,14 @@ class TrainsViewModel(
         while (true) {
             delay(TrainsPolicy.TICK_MS)
             onIntent(TrainsIntent.Tick(clock()))
+        }
+    }
+
+    private suspend fun pollCrowding() {
+        while (true) {
+            val crowding = source.crowding(state.value.direction)
+            onIntent(TrainsIntent.CrowdingLoaded(crowding.orEmpty()))
+            delay(TrainsPolicy.CROWDING_POLL_MS)
         }
     }
 

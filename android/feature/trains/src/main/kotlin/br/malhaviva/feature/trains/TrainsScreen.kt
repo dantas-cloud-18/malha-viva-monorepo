@@ -165,6 +165,7 @@ private fun LineContent(
                         etaLabel(etaMinutes(views, station, state.direction))
                     },
                 state = if (here) StopState.Current else StopState.Upcoming,
+                detail = crowdingLabel(state.crowding[station.id]),
             )
         }
     Box(Modifier.fillMaxWidth().padding(horizontal = MalhaVivaSpacing.l)) {

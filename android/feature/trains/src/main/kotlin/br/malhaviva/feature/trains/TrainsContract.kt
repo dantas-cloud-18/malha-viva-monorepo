@@ -14,6 +14,8 @@ data class TrainsState(
     val nowMs: Long = 0L,
     val reconnectAttempt: Int = 0,
     val lastUpdateMs: Long? = null,
+    /** Lotacao por estacao; estacao ausente ou nula = "sem dados" (k-anonimato no servidor). */
+    val crowding: Map<String, CrowdingLevel?> = emptyMap(),
 )
 
 sealed interface TrainsIntent {
@@ -48,6 +50,11 @@ sealed interface TrainsIntent {
         val attempt: Int,
     ) : TrainsIntent
 
+    /** Lista inteira de lotacao; vazia quando a busca falha (some o nivel antigo em vez de ficar velho). */
+    data class CrowdingLoaded(
+        val crowding: Map<String, CrowdingLevel?>,
+    ) : TrainsIntent
+
     data class Tick(
         val nowMs: Long,
     ) : TrainsIntent
@@ -73,6 +80,7 @@ fun reduceTrains(
                 nowMs = maxOf(state.nowMs, intent.atMs),
                 lastUpdateMs = intent.atMs,
             )
+        is TrainsIntent.CrowdingLoaded -> state.copy(crowding = intent.crowding)
         is TrainsIntent.StreamLost -> state.copy(link = Link.Reconnecting, reconnectAttempt = intent.attempt)
         is TrainsIntent.Tick ->
             state.copy(
@@ -91,6 +99,7 @@ private fun selectDirection(
         state.copy(
             direction = direction,
             trains = emptyMap(),
+            crowding = emptyMap(),
             lastUpdateMs = null,
             reconnectAttempt = 0,
             link = if (state.link == Link.Idle) Link.Idle else Link.Connecting,
