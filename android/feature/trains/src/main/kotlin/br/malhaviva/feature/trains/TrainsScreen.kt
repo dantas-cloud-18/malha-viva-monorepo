@@ -3,6 +3,7 @@ package br.malhaviva.feature.trains
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -143,6 +147,19 @@ private fun LineContent(
     line: LineNetwork,
     views: List<TrainView>,
 ) {
+    if (views.any { it.situation == Situation.StoppedBetweenStations }) {
+        Text(
+            stringResource(R.string.trains_alert_stopped),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.errorContainer)
+                    .padding(MalhaVivaSpacing.l)
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+        )
+    }
     if (views.isEmpty()) {
         val offline = state.link == Link.Reconnecting
         EmptyState(
@@ -216,6 +233,7 @@ private fun TrainList(
                 )
                 Column(Modifier.padding(start = MalhaVivaSpacing.m)) {
                     Text(placeLabel(view, line), style = MaterialTheme.typography.bodyLarge)
+                    Text(statusLabel(view, line), style = MaterialTheme.typography.bodyMedium)
                     Text(
                         freshnessLabel(view.freshness),
                         style = MaterialTheme.typography.labelMedium,

@@ -6,6 +6,8 @@ import br.malhaviva.feature.trains.CrowdingLevel
 import br.malhaviva.feature.trains.LineNetwork
 import br.malhaviva.feature.trains.LineStation
 import br.malhaviva.feature.trains.LiveTrain
+import br.malhaviva.feature.trains.Situation
+import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 
@@ -62,11 +64,23 @@ object TrainsWire {
         }
     }
 
+    private fun etas(array: JSONArray?): Map<String, Int> =
+        if (array == null) {
+            emptyMap()
+        } else {
+            (0 until array.length()).associate {
+                val e = array.getJSONObject(it)
+                e.getString("station_id") to e.getInt("eta_s")
+            }
+        }
+
     private fun train(o: JSONObject): LiveTrain? {
         val along = o.getDouble("along_m")
         val speed = o.getDouble("speed_mps")
         val band = ConfidenceBand.fromWire(o.getString("confidence"))
         val valid = along.isFinite() && speed.isFinite() && speed >= 0.0 && band != null
+        // campos novos sao opcionais: servidor antigo continua valendo (situacao = andando, sem ETA)
+        val situation = Situation.fromWire(o.optString("situation")) ?: Situation.Moving
         return if (valid && band != null) {
             LiveTrain(
                 id = o.getString("id"),
@@ -74,6 +88,9 @@ object TrainsWire {
                 speedMps = speed,
                 confidence = band,
                 updatedAtMs = o.getLong("updated_at_ms"),
+                situation = situation,
+                stationId = if (o.isNull("station_id")) null else o.optString("station_id").ifEmpty { null },
+                etasS = etas(o.optJSONArray("etas")),
             )
         } else {
             null

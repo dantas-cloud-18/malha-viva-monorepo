@@ -28,13 +28,33 @@ enum class ConfidenceBand(
     }
 }
 
-/** `TrainState` do contrato. O id e efemero e nao identifica ninguem. */
+/** `situation` do contrato; `StoppedBetweenStations` e o alerta de trem parado fora de estacao. */
+enum class Situation(
+    val wire: String,
+) {
+    Moving("moving"),
+    AtStation("at_station"),
+    StoppedBetweenStations("stopped_between_stations"),
+    ;
+
+    companion object {
+        fun fromWire(wire: String): Situation? = entries.firstOrNull { it.wire == wire }
+    }
+}
+
+/**
+ * `TrainState` do contrato. O id e efemero e nao identifica ninguem. [stationId] e a estacao atual (parado em
+ * estacao) ou a proxima; [etasS] traz segundos ate cada estacao a frente, contados do instante da resposta.
+ */
 data class LiveTrain(
     val id: String,
     val alongM: Double,
     val speedMps: Double,
     val confidence: ConfidenceBand,
     val updatedAtMs: Long,
+    val situation: Situation = Situation.Moving,
+    val stationId: String? = null,
+    val etasS: Map<String, Int> = emptyMap(),
 )
 
 /** [receivedAtMs] vem do relogio do aparelho (monotonico): a idade do dado nao depende do relogio do servidor. */
@@ -83,6 +103,10 @@ data class TrainView(
     val confidence: Double,
     val freshness: Freshness,
     val atStationId: String?,
+    val situation: Situation = Situation.Moving,
+    val stationId: String? = null,
+    /** ETA do servidor por estacao, em segundos, ja descontada a idade do dado. */
+    val etasS: Map<String, Int> = emptyMap(),
 )
 
 /** Faixa grossa de lotacao do contrato (`low|medium|high`). Sem dados = ausente do mapa ou nulo. */

@@ -73,6 +73,23 @@ internal fun etaLabel(minutes: Int?): String =
         else -> stringResource(R.string.trains_eta_minutes, minutes)
     }
 
+/** Texto da situacao: parado em X, andando com a proxima estacao, ou o alerta de parado entre estacoes. */
+@Composable
+internal fun statusLabel(
+    view: TrainView,
+    line: LineNetwork,
+): String {
+    val name = view.stationId?.let { id -> line.stations.firstOrNull { it.id == id }?.name }
+    return when {
+        view.situation == Situation.StoppedBetweenStations && name != null ->
+            stringResource(R.string.trains_status_stopped_between_next, name)
+        view.situation == Situation.StoppedBetweenStations -> stringResource(R.string.trains_status_stopped_between)
+        view.situation == Situation.AtStation && name != null -> stringResource(R.string.trains_status_at, name)
+        name != null -> stringResource(R.string.trains_status_moving_next, name)
+        else -> stringResource(R.string.trains_status_moving)
+    }
+}
+
 @Composable
 internal fun refreshLabel(state: TrainsState): String {
     val last = state.lastUpdateMs

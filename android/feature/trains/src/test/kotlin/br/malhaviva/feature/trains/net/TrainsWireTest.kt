@@ -2,6 +2,7 @@ package br.malhaviva.feature.trains.net
 
 import br.malhaviva.feature.trains.ConfidenceBand
 import br.malhaviva.feature.trains.CrowdingLevel
+import br.malhaviva.feature.trains.Situation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -19,6 +20,29 @@ class TrainsWireTest {
         assertEquals(11.5, t.speedMps, 1e-9)
         assertEquals(ConfidenceBand.Medium, t.confidence)
         assertEquals(1700000000000L, t.updatedAtMs)
+    }
+
+    @Test
+    fun `parses situation, reference station and etas, and defaults them for an older server`() {
+        val full =
+            ok.dropLast(1) +
+                ""","situation":"stopped_between_stations","station_id":"bangu",""" +
+                """"etas":[{"station_id":"bangu","eta_s":90},{"station_id":"realengo","eta_s":240}]}"""
+        val t = requireNotNull(TrainsWire.parseTrain(full))
+        assertEquals(Situation.StoppedBetweenStations, t.situation)
+        assertEquals("bangu", t.stationId)
+        assertEquals(mapOf("bangu" to 90, "realengo" to 240), t.etasS)
+        val noStation =
+            requireNotNull(
+                TrainsWire.parseTrain(
+                    ok.dropLast(1) + ""","situation":"at_station","station_id":null,"etas":[]}""",
+                ),
+            )
+        assertEquals(Situation.AtStation, noStation.situation)
+        assertNull(noStation.stationId)
+        val old = requireNotNull(TrainsWire.parseTrain(ok))
+        assertEquals(Situation.Moving, old.situation)
+        assertEquals(emptyMap<String, Int>(), old.etasS)
     }
 
     @Test

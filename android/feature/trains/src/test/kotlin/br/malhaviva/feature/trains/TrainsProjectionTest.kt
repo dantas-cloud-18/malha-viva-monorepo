@@ -130,6 +130,51 @@ class TrainsProjectionTest {
     }
 
     @Test
+    fun `eta prefers the server estimate, discounted by the age of the data`() {
+        val bangu = line.stations[2]
+        // pela posicao seriam 60 s (1 min); o servidor diz 150 s e a projecao ja descontou 30 s -> 120 s = 2 min
+        val withServer =
+            TrainView(
+                "a",
+                19_400.0,
+                10.0,
+                ConfidenceBand.High,
+                1.0,
+                Freshness.Live,
+                null,
+                etasS = mapOf(bangu.id to 120),
+            )
+        assertEquals(2, etaMinutes(listOf(withServer), bangu, Direction.CentralToSantaCruz))
+        val without = withServer.copy(etasS = emptyMap())
+        assertEquals(1, etaMinutes(listOf(without), bangu, Direction.CentralToSantaCruz))
+    }
+
+    @Test
+    fun `projection carries the server situation and discounts the age from the etas`() {
+        val tracked =
+            TrackedTrain(
+                LiveTrain(
+                    "t",
+                    1_000.0,
+                    10.0,
+                    ConfidenceBand.Low,
+                    0L,
+                    Situation.StoppedBetweenStations,
+                    "x",
+                    mapOf(
+                        "x" to 100,
+                        "y" to 20,
+                    ),
+                ),
+                receivedAtMs = 0L,
+            )
+        val view = projectTrain(tracked, line, Direction.CentralToSantaCruz, nowMs = 30_000L)
+        assertEquals(Situation.StoppedBetweenStations, view.situation)
+        assertEquals("x", view.stationId)
+        assertEquals(mapOf("x" to 70, "y" to 0), view.etasS)
+    }
+
+    @Test
     fun `eta ignores trains moving away, stopped, at a station or without signal`() {
         val central = line.stations[0]
         val views =

@@ -39,6 +39,9 @@ fun projectTrain(
         confidence = confidenceAt(train.confidence.level, age),
         freshness = freshness,
         atStationId = atStation?.id,
+        situation = train.situation,
+        stationId = train.stationId,
+        etasS = train.etasS.mapValues { (_, s) -> (s - age / TrainsPolicy.MS_PER_S).coerceAtLeast(0.0).toInt() },
     )
 }
 
@@ -96,13 +99,15 @@ fun etaMinutes(
     station: LineStation,
     direction: Direction,
 ): Int? {
+    // prefere o ETA do servidor (descontada a idade); sem ele, marcha constante pela posicao projetada
     val seconds =
         views
             .filter {
                 it.freshness != Freshness.NoSignal && it.atStationId == null && it.speedMps >= TrainsPolicy.MOVING_MPS
-            }.map { direction.sign * (station.alongM - it.alongM) to it.speedMps }
-            .filter { (distance, _) -> distance >= 0 }
-            .minOfOrNull { (distance, speed) -> distance / speed }
+            }.mapNotNull { view ->
+                view.etasS[station.id]?.toDouble()
+                    ?: (direction.sign * (station.alongM - view.alongM)).takeIf { it >= 0 }?.let { it / view.speedMps }
+            }.minOrNull()
             ?: return null
     val minutes = ceil(seconds / TrainsPolicy.S_PER_MIN).toInt()
     return if (minutes > TrainsPolicy.MAX_ETA_MIN) null else minutes
