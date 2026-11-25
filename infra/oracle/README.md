@@ -10,7 +10,8 @@ Uma VM ARM (Ampere A1) roda tudo: Postgres/PostGIS, backend Ktor e Caddy (HTTPS 
 4. **SSH**: `ssh ubuntu@<IP-PUBLICO>`
 5. **Codigo**:
    ```bash
-   git clone <URL-DO-REPO> malha-viva && cd malha-viva/infra/oracle
+   git clone -b feat/fase-1 <URL-DO-REPO> malha-viva && cd malha-viva/infra/oracle
+   # Repositório privado: use `gh auth login` na VM ou um deploy key só de leitura.
    ```
 6. **Setup**: `./setup.sh`. Ele instala Docker, libera 80/443 no iptables (`/etc/iptables/rules.v4`), cria `.env` com segredos aleatorios e `DOMAIN=<IP>.sslip.io`, sobe a stack e agenda backup diario (03:00, 7 copias em `/var/backups/malhaviva`). O primeiro build do backend leva alguns minutos. Se o `docker` pedir permissao, saia e entre de novo no SSH.
 7. **Teste**: `https://<IP>.sslip.io/v1/network/corridors/RAMAL_SANTA_CRUZ` deve devolver JSON (o certificado leva ~1 min na primeira vez).
