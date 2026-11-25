@@ -18,6 +18,8 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.time.Instant
+import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -119,6 +121,8 @@ private val RUNS =
         3 to LOTE_LENTO_MS,
     )
 private val LENIENT = Json { ignoreUnknownKeys = true }
+private const val MOVING_MPS = 1.0
+private const val FULL_TURN_DEG = 360.0
 
 class ParityHarnessTest {
     private val fixtureFile = File("../tools/paridade/fixtures/fixture.json")
@@ -189,10 +193,23 @@ class ParityHarnessTest {
         val samples =
             (from until to).joinToString(",") {
                 val a = cel.amostras[it]
+                val bearing = bearingJson(cel.amostras.getOrNull(it - 1), a)
                 """{"seq":$it,"ts":"${Instant.ofEpochMilli(a.t)}","lat":${a.lat},"lon":${a.lon},""" +
-                    """"accuracy_m":${a.acc},"speed_mps":${a.v}}"""
+                    """"accuracy_m":${a.acc},"speed_mps":${a.v}$bearing}"""
             }
         return """{"anon_epoch_id":"epoch-${cel.id}","corridor":"$CORRIDOR","samples":[$samples]}"""
+    }
+
+    // rumo como o GPS do aparelho informa: so em movimento, a partir do deslocamento desde a amostra anterior
+    private fun bearingJson(
+        prev: Am?,
+        cur: Am,
+    ): String {
+        if (prev == null || cur.v < MOVING_MPS) return ""
+        val dx = Math.toRadians(cur.lon - prev.lon) * cos(Math.toRadians(cur.lat))
+        val dy = Math.toRadians(cur.lat - prev.lat)
+        val deg = (Math.toDegrees(atan2(dx, dy)) + FULL_TURN_DEG) % FULL_TURN_DEG
+        return ""","bearing_deg":$deg"""
     }
 
     private fun snapshot(hub: LiveHub): List<OutTrain> =

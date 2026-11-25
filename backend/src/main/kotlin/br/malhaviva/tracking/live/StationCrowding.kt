@@ -49,6 +49,7 @@ enum class CrowdingLevel {
 
 object CrowdingPolicy {
     /** Estacao = ate 100 m ao longo da via; parado = ate 1 m/s. Limites propostos, calibrar com dado real. */
+    const val WINDOW_MS = 30_000L
     const val STATION_RADIUS_M = 100.0
     const val DWELL_MAX_SPEED_MPS = 1.0
 

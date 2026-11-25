@@ -197,6 +197,22 @@ class IngestRoutesTest {
         }
 
     @Test
+    fun `lote de uma amostra so usa o rumo para achar o sentido`() =
+        testApplication {
+            setup()
+            val west = line.copy(direction = Direction.SANTA_CRUZ_TO_CENTRAL)
+            assertEquals(HttpStatusCode.Accepted, post(batch(listOf(sample(1, -43.15)), "epoch-1"), tokenN = 1).status)
+            assertEquals(0, hub.snapshot(west).size + hub.snapshot(line).size, "sem rumo nao ha sentido")
+            val withBearing = sample(2, -43.15, extra = ""","bearing_deg":270.0""")
+            assertEquals(HttpStatusCode.Accepted, post(batch(listOf(withBearing), "epoch-2"), tokenN = 2).status)
+            assertEquals(1, hub.snapshot(west).size)
+            assertEquals(0, hub.snapshot(line).size)
+            val east = sample(3, -43.15, extra = ""","bearing_deg":90.0""")
+            assertEquals(HttpStatusCode.Accepted, post(batch(listOf(east), "epoch-3"), tokenN = 3).status)
+            assertEquals(1, hub.snapshot(line).size)
+        }
+
+    @Test
     fun `amostra aceita aparece no snapshot do hub`() =
         testApplication {
             setup()
@@ -205,6 +221,6 @@ class IngestRoutesTest {
                 assertEquals(HttpStatusCode.Accepted, post(batch(samples, "epoch-$n"), tokenN = n).status)
             }
             val train = hub.snapshot(line).single()
-            assertEquals(br.malhaviva.tracking.live.ConfidenceBand.LOW, train.confidence)
+            assertEquals(br.malhaviva.tracking.live.ConfidenceBand.MEDIUM, train.confidence)
         }
 }

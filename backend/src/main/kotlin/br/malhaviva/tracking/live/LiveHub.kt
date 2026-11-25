@@ -68,7 +68,7 @@ class LiveHub(
     fun freshPositions(key: LineKey): List<PassengerPosition> =
         synchronized(this) {
             val now = clock()
-            positions[key].orEmpty().values.filter { now - it.tsMs <= ClusterPolicy.MAX_AGE_MS }
+            positions[key].orEmpty().values.filter { now - it.tsMs <= CrowdingPolicy.WINDOW_MS }
         }
 
     /** Remove posicoes velhas, reagrupa e guarda o resultado. Chamar dentro do lock. */
@@ -76,7 +76,7 @@ class LiveHub(
         val now = clock()
         val current = positions[key].orEmpty().filterValues { now - it.tsMs <= ClusterPolicy.MAX_AGE_MS }
         positions[key] = current.toMutableMap()
-        val result = clusterer.cluster(current.values, now, trains[key].orEmpty())
+        val result = clusterer.cluster(current.values, now, trains[key].orEmpty(), key.direction)
         trains[key] = result
         computedAt[key] = now
         return result

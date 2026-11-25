@@ -11,6 +11,7 @@ data class IngestSample(
     val accuracyM: Double,
     val speedMps: Double? = null,
     val mockLocation: Boolean = false,
+    val bearingDeg: Double? = null,
 )
 
 data class ValidationResult(

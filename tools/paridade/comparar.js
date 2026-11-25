@@ -197,10 +197,10 @@ const equivalencia = resultado.cenarios.map(c => ({ id: c.id, r: c.runs.find(r =
 const eqOk = equivalencia.filter(e => e.r.ok_contagem && e.r.ok_posicao !== false && e.r.ok_sentido !== false).map(e => e.id);
 const eqDif = equivalencia.filter(e => !(e.r.ok_contagem && e.r.ok_posicao !== false && e.r.ok_sentido !== false)).map(e => e.id);
 resultado.veredito = { equivalencia_K1_ok: eqOk, equivalencia_K1_divergente: eqDif, producao_K3_oculta: ['S3', 'S4'].map(s => ({ cenario: s, trens_novo: cada(s, 3).trens_novo, trens_antigo: cada(s, 3).trens_antigo })) };
-out('VEREDITO (envio a cada 15 s; K=1 = equivalencia do algoritmo sem k-anonimato; K=3 = producao)');
+out('VEREDITO (envio a cada 15 s; K=1 = padrao de producao e equivalencia do algoritmo; K=3 = limiar opcional por MALHAVIVA_TRAIN_MIN_CONTRIBUTORS)');
 out('  K=1 equivalentes: ' + (eqOk.join(', ') || 'nenhum'));
 out('  K=1 divergentes : ' + (eqDif.join(', ') || 'nenhum'));
-out(`  K=3: S3 (1 celular) antigo ${cada('S3', 3).trens_antigo} trem-ticks x novo ${cada('S3', 3).trens_novo}; S4 (2 celulares) antigo ${cada('S4', 3).trens_antigo} x novo ${cada('S4', 3).trens_novo}  (k-anonimato oculta de proposito)`);
+out(`  K=3: S3 (1 celular) antigo ${cada('S3', 3).trens_antigo} trem-ticks x novo ${cada('S3', 3).trens_novo}; S4 (2 celulares) antigo ${cada('S4', 3).trens_antigo} x novo ${cada('S4', 3).trens_novo}  (so com limiar >= 2 no servidor; o padrao K=1 mostra)`);
 fs.mkdirSync(path.join(__dirname, 'out'), { recursive: true });
 fs.writeFileSync(path.join(__dirname, 'out', 'resultado.json'), JSON.stringify(resultado, null, 1));
 console.log(linhas.join('\n'));

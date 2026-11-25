@@ -3,8 +3,11 @@ package br.malhaviva.tracking.ingest
 import kotlin.math.cos
 import kotlin.math.hypot
 
-/** Distancia lateral maxima ao tracado para a amostra contar como dentro do corredor. */
-const val MAX_LATERAL_M = 60.0
+/**
+ * Distancia lateral maxima ao tracado para a amostra contar como dentro do corredor. 150 m = o limite do Motor.gs;
+ * cobre a precisao aceita (ate 50 m) mais o desvio do traçado OSM (p95 11 m, max 18 m) com folga.
+ */
+const val MAX_LATERAL_M = 150.0
 
 private const val METERS_PER_DEGREE = 111_320.0
 

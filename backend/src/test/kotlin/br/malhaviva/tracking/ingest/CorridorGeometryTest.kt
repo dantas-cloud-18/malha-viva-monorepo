@@ -18,8 +18,9 @@ class CorridorGeometryTest {
     }
 
     @Test
-    fun `limite lateral de 60 m`() {
+    fun `limite lateral de 150 m`() {
         assertFalse(corridor.offCorridor(-22.8995, -43.15))
-        assertTrue(corridor.offCorridor(-22.899, -43.15))
+        assertFalse(corridor.offCorridor(-22.899, -43.15))
+        assertTrue(corridor.offCorridor(-22.8985, -43.15))
     }
 }

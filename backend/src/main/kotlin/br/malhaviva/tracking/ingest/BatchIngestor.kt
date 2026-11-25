@@ -11,6 +11,8 @@ import kotlinx.serialization.json.Json
 import java.time.Duration
 import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
+import kotlin.math.cos
+import kotlin.math.sin
 
 const val MAX_BODY_BYTES = 128 * 1024
 
@@ -21,6 +23,10 @@ private const val TOO_MANY = 429
 private const val CORRIDOR_ID = "RAMAL_SANTA_CRUZ"
 private const val MAX_SAMPLES = 120
 private const val MIN_PROGRESS_M = 50.0
+private const val BEARING_MIN_SPEED_MPS = 1.0
+private const val BEARING_PROBE_M = 50.0
+private const val BEARING_MIN_ALONG_M = 10.0
+private const val METERS_PER_DEGREE = 111_320.0
 private const val MAX_BEARING_DEG = 360.0
 private const val MAX_LAT = 90.0
 private const val MAX_LON = 180.0
@@ -166,13 +172,36 @@ class BatchIngestor(
 
     /**
      * Sentido pelo avanco ao longo do tracado entre a primeira e a ultima amostra aceita
-     * (along crescente = Central para Santa Cruz). Menos de 50 m de avanco: indeterminado.
+     * (along crescente = Central para Santa Cruz). Menos de 50 m de avanco (por exemplo lote de 1 amostra):
+     * usa o rumo (`bearing_deg`) da ultima amostra; sem rumo utilizavel fica indeterminado e vale o sentido da epoca.
      */
     private fun heading(accepted: List<IngestSample>): Direction? {
         val delta = along(accepted.lastOrNull()) - along(accepted.firstOrNull())
         return when {
             delta >= MIN_PROGRESS_M -> Direction.CENTRAL_TO_SANTA_CRUZ
             delta <= -MIN_PROGRESS_M -> Direction.SANTA_CRUZ_TO_CENTRAL
+            else -> accepted.lastOrNull()?.let(::headingFromBearing)
+        }
+    }
+
+    /**
+     * Projeta um ponto BEARING_PROBE_M a frente no rumo medido e olha para que lado do tracado ele andou. O rumo
+     * do GPS so vale em movimento; rumo quase perpendicular ao tracado (avanco < BEARING_MIN_ALONG_M) e ignorado.
+     */
+    private fun headingFromBearing(s: IngestSample): Direction? {
+        val moved =
+            s.bearingDeg
+                ?.takeIf { (s.speedMps ?: 0.0) >= BEARING_MIN_SPEED_MPS }
+                ?.let { Math.toRadians(it) }
+                ?.let { rad ->
+                    val lat2 = s.lat + BEARING_PROBE_M * cos(rad) / METERS_PER_DEGREE
+                    val lon2 = s.lon + BEARING_PROBE_M * sin(rad) / (METERS_PER_DEGREE * cos(Math.toRadians(s.lat)))
+                    geometry.alongTrack(lat2, lon2)?.first?.minus(along(s))
+                }
+        return when {
+            moved == null -> null
+            moved >= BEARING_MIN_ALONG_M -> Direction.CENTRAL_TO_SANTA_CRUZ
+            moved <= -BEARING_MIN_ALONG_M -> Direction.SANTA_CRUZ_TO_CENTRAL
             else -> null
         }
     }
@@ -216,5 +245,5 @@ private fun SampleDto.toIngestSample(): IngestSample {
         } catch (e: DateTimeParseException) {
             throw IngestRejected(BAD_REQUEST, "Malformed timestamp", e)
         }
-    return IngestSample(seq, tsMs, lat, lon, accuracyM, speedMps, mockLocation)
+    return IngestSample(seq, tsMs, lat, lon, accuracyM, speedMps, mockLocation, bearingDeg)
 }

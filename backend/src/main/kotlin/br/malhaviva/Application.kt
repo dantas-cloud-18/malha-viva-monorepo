@@ -48,6 +48,7 @@ import org.slf4j.LoggerFactory
 import javax.sql.DataSource
 
 private const val METERS_PER_KM = 1000.0
+private const val TRAIN_CORRIDOR = "RAMAL_SANTA_CRUZ"
 
 private val log = LoggerFactory.getLogger("br.malhaviva.Application")
 
@@ -64,8 +65,7 @@ fun main() {
 @Suppress("LongParameterList")
 fun Application.module(
     dataSource: DataSource,
-    liveHub: LiveHub =
-        LiveHub(clusterer = TrainClusterer(ClusterPolicy.minContributorsFromEnv(System::getenv))),
+    liveHub: LiveHub = LiveHub(clusterer = trainClusterer(NetworkRepository(dataSource))),
     tokens: InMemoryTelemetryTokenStore = InMemoryTelemetryTokenStore(),
     geometry: CorridorGeometry = JdbcCorridorGeometry(dataSource),
     integrity: IntegrityVerifier = integrityVerifierFromEnv(),
@@ -112,6 +112,19 @@ fun Application.module(
         }
     }
 }
+
+/** Estacoes do corredor para ETA e situacao (o repositorio ja guarda o resultado; vazio ate o corredor existir). */
+private fun trainClusterer(network: NetworkRepository) =
+    TrainClusterer(
+        ClusterPolicy.minContributorsFromEnv(System::getenv),
+        stations = {
+            network
+                .find(TRAIN_CORRIDOR)
+                ?.stations
+                ?.map { StationRef(it.stationId, it.km * METERS_PER_KM) }
+                .orEmpty()
+        },
+    )
 
 /**
  * Atras do ALB: o ALB ACRESCENTA o IP de quem conectou ao fim de X-Forwarded-For, entao o ULTIMO item e o cliente

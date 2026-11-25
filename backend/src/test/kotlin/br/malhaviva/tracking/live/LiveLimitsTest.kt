@@ -95,9 +95,9 @@ class LiveLimitsTest {
     fun `snapshot is served from a one second cache and refreshed by updates`() {
         val hub = LiveHub(clock = { clock })
         val t0 = clock
-        // 29,8 s de idade: vale agora, mas passa dos 30 s em 500 ms
+        // 59,8 s de idade: vale agora, mas passa dos 60 s em 500 ms
         listOf(1000.0, 1050.0, 1100.0).forEachIndexed { i, along ->
-            hub.update(key, "e$i", PassengerPosition(along, 12.0, t0 - 29_800))
+            hub.update(key, "e$i", PassengerPosition(along, 12.0, t0 - 59_800))
         }
         assertEquals(1, hub.snapshot(key).size)
         clock = t0 + 500
