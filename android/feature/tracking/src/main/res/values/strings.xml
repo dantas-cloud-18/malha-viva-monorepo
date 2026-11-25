@@ -37,5 +37,16 @@
     <string name="tracking_stopped_left_corridor">Você saiu do trajeto do trem.</string>
     <string name="tracking_stopped_outside_station">Você ficou parado fora de uma estação por muito tempo.</string>
     <string name="tracking_stopped_max_duration">A viagem passou do tempo máximo de compartilhamento.</string>
+    <string name="tracking_stopped_consent">O consentimento de localização foi retirado em Privacidade, então o compartilhamento parou e nada foi enviado.</string>
     <string name="tracking_stopped_dismiss">Entendi</string>
+
+    <string name="tracking_consent_title">Consentimento necessário</string>
+    <string name="tracking_consent_message">Para compartilhar a viagem, ative o consentimento de localização em Conta, Privacidade. Nada é pedido ao sistema antes disso.</string>
+    <string name="tracking_consent_dismiss">Entendi</string>
+
+    <string name="tracking_background_action">Localização em segundo plano (opcional)</string>
+    <string name="tracking_background_title">Permitir localização em segundo plano?</string>
+    <string name="tracking_background_message">Por padrão o compartilhamento já continua com a tela apagada enquanto a notificação estiver visível. Esta permissão extra só serve para o app continuar a viagem se for fechado, e você pode negar sem perder nenhuma função. O uso segue anônimo e você pode retirá-la nas configurações do aparelho.</string>
+    <string name="tracking_background_allow">Continuar</string>
+    <string name="tracking_background_deny">Agora não</string>
 </resources>

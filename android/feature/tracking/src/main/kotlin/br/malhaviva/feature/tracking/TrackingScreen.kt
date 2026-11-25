@@ -10,13 +10,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -39,24 +44,65 @@ fun TrackingScreen(
             )
         }
     LaunchedEffect(state) {
-        when (state) {
+        when (val current = state) {
+            // As permissoes do sistema so sao pedidas aqui, depois do consentimento e do aceite.
             TrackingState.NeedsPermission -> permissionLauncher.launch(requiredPermissions())
             TrackingState.Starting -> TrackingService.start(context)
+            is TrackingState.Stopped -> if (current.reason == StopCause.ConsentRevoked) TrackingService.stop(context)
             else -> Unit
         }
     }
-    TrackingContent(
-        state = state,
-        sharingBlocked = viewModel.sharingBlocked,
-        onIntent = { intent ->
-            viewModel.onIntent(intent)
-            if (intent == TrackingIntent.StopRequested) TrackingService.stop(context)
-        },
-        modifier = modifier,
-    )
+    Column(modifier) {
+        TrackingContent(
+            state = state,
+            sharingBlocked = viewModel.sharingBlocked,
+            onIntent = { intent ->
+                viewModel.onIntent(intent)
+                if (intent == TrackingIntent.StopRequested) TrackingService.stop(context)
+            },
+            modifier = Modifier.weight(1f),
+        )
+        if (state is TrackingState.Active) BackgroundLocationOffer()
+    }
 }
 
-/** Apenas "durante o uso": nunca pedimos localizacao em segundo plano. */
+/**
+ * Localizacao em segundo plano: opcional, pedida separada da de primeiro plano (Android 11+ exige) e so
+ * depois de uma explicacao propria. So aparece com a viagem ativa, ou seja, com consentimento e permissao.
+ */
+@Composable
+private fun BackgroundLocationOffer() {
+    val context = LocalContext.current
+    var granted by remember { mutableStateOf(context.hasBackgroundLocation()) }
+    var explaining by remember { mutableStateOf(false) }
+    val launcher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it }
+    if (granted) return
+    OutlinedButton(
+        onClick = { explaining = true },
+        modifier = Modifier.padding(horizontal = MalhaVivaSpacing.l, vertical = MalhaVivaSpacing.s),
+    ) { Text(stringResource(R.string.tracking_background_action)) }
+    if (explaining) {
+        AlertDialog(
+            onDismissRequest = { explaining = false },
+            title = { Text(stringResource(R.string.tracking_background_title)) },
+            text = { Text(stringResource(R.string.tracking_background_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        explaining = false
+                        launcher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                    },
+                ) { Text(stringResource(R.string.tracking_background_allow)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { explaining = false }) { Text(stringResource(R.string.tracking_background_deny)) }
+            },
+        )
+    }
+}
+
+/** Somente primeiro plano; a de segundo plano e opcional e pedida a parte em [BackgroundLocationOffer]. */
 private fun requiredPermissions(): Array<String> =
     buildList {
         add(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -79,6 +125,7 @@ fun TrackingContent(
                 modifier = modifier,
             )
         state == TrackingState.NeedsDisclosure -> DisclosureContent(onIntent, modifier)
+        state == TrackingState.NeedsConsent -> ConsentRequiredContent(onIntent, modifier)
         else -> StateContent(state, onIntent, modifier)
     }
 }
@@ -94,7 +141,7 @@ private fun StateContent(
     var actionLabel: Int? = null
     var action: TrackingIntent? = null
     when (state) {
-        TrackingState.Off, TrackingState.NeedsDisclosure -> {
+        TrackingState.Off, TrackingState.NeedsDisclosure, TrackingState.NeedsConsent -> {
             title = R.string.tracking_off_title
             message = R.string.tracking_off_message
             actionLabel = R.string.tracking_off_action
@@ -139,11 +186,30 @@ private fun stopMessage(cause: StopCause): Int =
     when (cause) {
         StopCause.UserStopped -> R.string.tracking_stopped_user
         StopCause.PermissionDenied -> R.string.tracking_stopped_permission
+        StopCause.ConsentRevoked -> R.string.tracking_stopped_consent
         StopCause.NoRoute -> R.string.tracking_stopped_no_route
         StopCause.LeftCorridor -> R.string.tracking_stopped_left_corridor
         StopCause.StoppedOutsideStation -> R.string.tracking_stopped_outside_station
         StopCause.MaxDuration -> R.string.tracking_stopped_max_duration
     }
+
+@Composable
+private fun ConsentRequiredContent(
+    onIntent: (TrackingIntent) -> Unit,
+    modifier: Modifier,
+) {
+    EmptyState(
+        title = stringResource(R.string.tracking_consent_title),
+        message = stringResource(R.string.tracking_consent_message),
+        modifier = modifier,
+        action = {
+            CheckInButton(
+                label = stringResource(R.string.tracking_consent_dismiss),
+                onClick = { onIntent(TrackingIntent.Dismissed) },
+            )
+        },
+    )
+}
 
 /** Divulgacao destacada: so aparece depois do toque do usuario e nao pede nada antes do aceite. */
 @Composable

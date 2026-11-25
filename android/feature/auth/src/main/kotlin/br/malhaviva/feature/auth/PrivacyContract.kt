@@ -183,3 +183,7 @@ private fun reducePrivacyFailure(
         message = intent.error.toMessage(),
         retryAfterSeconds = (intent.error as? AuthError.RateLimited)?.retryAfterSeconds,
     )
+
+/** Consentimento de localizacao vigente: concedido e sem pedido de novo aceite da politica (falha fechada). */
+fun ConsentList.isLocationGranted(): Boolean =
+    consents.any { it.purpose == ConsentPurpose.Location.wire && it.granted && !it.needsReconsent }

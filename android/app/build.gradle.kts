@@ -10,7 +10,8 @@ plugins {
 
 // Base da API: -Pmalhaviva.apiBaseUrl=... ; debug aponta para o host do emulador, release exige https.
 val apiBaseUrl: String? = providers.gradleProperty("malhaviva.apiBaseUrl").orNull
-val releaseApiBaseUrl: String = apiBaseUrl ?: "https://api.malhaviva.invalid"
+// TODO(publicacao): unico lugar do placeholder; troque pelo dominio real (ou passe -Pmalhaviva.apiBaseUrl=https://...).
+val releaseApiBaseUrl: String = apiBaseUrl ?: "https://api.malhaviva.example"
 val buildsRelease = gradle.startParameter.taskNames.any { it.contains("release", ignoreCase = true) }
 check(!buildsRelease || releaseApiBaseUrl.startsWith("https://")) {
     "malhaviva.apiBaseUrl precisa ser https:// no release (recebido: $releaseApiBaseUrl)"
@@ -30,6 +31,18 @@ val pinSha256: List<String> =
 val pinExpiration: String = providers.gradleProperty("malhaviva.pinExpiration").getOrElse("")
 val pinDomain: String =
     providers.gradleProperty("malhaviva.pinDomain").getOrElse(URI(releaseApiBaseUrl).host.orEmpty())
+
+// Assinatura do release: MALHAVIVA_KEYSTORE_PATH, _PASSWORD, _ALIAS e _KEY_PASSWORD, lidas do ambiente ou de
+// propriedades do Gradle (~/.gradle/gradle.properties). Nunca versionadas; se faltar qualquer uma, o release sai sem assinatura.
+fun signingValue(name: String): String? =
+    providers.environmentVariable(name).orNull?.takeIf { it.isNotBlank() }
+        ?: providers.gradleProperty(name).orNull?.takeIf { it.isNotBlank() }
+
+val keystorePath = signingValue("MALHAVIVA_KEYSTORE_PATH")
+val keystorePassword = signingValue("MALHAVIVA_KEYSTORE_PASSWORD")
+val signKeyAlias = signingValue("MALHAVIVA_KEY_ALIAS")
+val signKeyPassword = signingValue("MALHAVIVA_KEY_PASSWORD")
+val hasSigning = listOf(keystorePath, keystorePassword, signKeyAlias, signKeyPassword).all { it != null }
 
 abstract class GenerateNetworkSecurityConfig : DefaultTask() {
     @get:Input
@@ -100,8 +113,20 @@ android {
         applicationId = "br.malhaviva.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1.0"
+        // Cada envio ao Play exige versionCode maior: -Pmalhaviva.versionCode=N no CI.
+        versionCode = providers.gradleProperty("malhaviva.versionCode").map { it.toInt() }.getOrElse(1)
+        versionName = providers.gradleProperty("malhaviva.versionName").getOrElse("0.1.0")
+    }
+
+    signingConfigs {
+        if (hasSigning) {
+            create("release") {
+                storeFile = file(checkNotNull(keystorePath))
+                storePassword = keystorePassword
+                keyAlias = signKeyAlias
+                keyPassword = signKeyPassword
+            }
+        }
     }
 
     buildFeatures { buildConfig = true }
@@ -113,6 +138,7 @@ android {
         release {
             buildConfigField("String", "API_BASE_URL", "\"$releaseApiBaseUrl\"")
             isDebuggable = false
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

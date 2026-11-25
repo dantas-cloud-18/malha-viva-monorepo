@@ -71,6 +71,19 @@ object NoopBatchUploader : BatchUploader {
 }
 
 /**
+ * Consentimento de localizacao da conta. [granted] e fonte unica da verdade: o servico e a UI leem daqui,
+ * entao revogar na tela de Privacidade encerra a viagem mesmo com a tela de rastreamento fechada.
+ */
+interface LocationConsent {
+    val granted: StateFlow<Boolean>
+}
+
+/** Padrao falha fechada: sem implementacao do app, o consentimento conta como nao concedido. */
+object DeniedLocationConsent : LocationConsent {
+    override val granted: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
+}
+
+/**
  * Dependencias do servico, preenchidas pelo app (ex.: no Application) antes de iniciar a viagem.
  * shortcut: holder global mutavel, trocar por injecao quando o Hilt chegar neste modulo.
  */
@@ -78,4 +91,6 @@ object TrackingEnvironment {
     @Volatile var uploader: BatchUploader = NoopBatchUploader
 
     @Volatile var routeProvider: RouteProvider = RouteProvider { null }
+
+    @Volatile var consent: LocationConsent = DeniedLocationConsent
 }

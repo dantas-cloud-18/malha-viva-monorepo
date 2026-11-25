@@ -25,8 +25,11 @@ class TrackingReducerTest {
     private fun run(
         vararg intents: TrackingIntent,
         blocked: Boolean = false,
+        consent: Boolean = true,
     ): TrackingState =
-        intents.fold<TrackingIntent, TrackingState>(TrackingState.Off) { s, i -> reduceTracking(s, i, blocked) }
+        intents.fold<TrackingIntent, TrackingState>(TrackingState.Off) { s, i ->
+            reduceTracking(s, i, blocked, consent)
+        }
 
     @Test
     fun `happy path goes from Off to Active`() {
@@ -81,8 +84,8 @@ class TrackingReducerTest {
     fun `dismissing a stopped state returns to Off and sharing can be restarted`() {
         val stopped =
             run(TrackingIntent.OptIn, TrackingIntent.DisclosureAccepted, TrackingIntent.PermissionResult(false))
-        assertEquals(TrackingState.Off, reduceTracking(stopped, TrackingIntent.Dismissed))
-        assertEquals(TrackingState.NeedsDisclosure, reduceTracking(stopped, TrackingIntent.OptIn))
+        assertEquals(TrackingState.Off, reduceTracking(stopped, TrackingIntent.Dismissed, false, true))
+        assertEquals(TrackingState.NeedsDisclosure, reduceTracking(stopped, TrackingIntent.OptIn, false, true))
     }
 
     @Test
@@ -94,7 +97,7 @@ class TrackingReducerTest {
     fun `viewmodel reduces user intents and service events`() =
         runTest {
             val events = MutableSharedFlow<ServiceEvent>()
-            val viewModel = TrackingViewModel(serviceEvents = events)
+            val viewModel = TrackingViewModel(serviceEvents = events, consent = MutableStateFlow(true))
             viewModel.state.test {
                 assertEquals(TrackingState.Off, awaitItem())
                 viewModel.onIntent(TrackingIntent.OptIn)
@@ -113,7 +116,12 @@ class TrackingReducerTest {
     @Test
     fun `viewmodel with blocked sharing stays Off`() =
         runTest {
-            val viewModel = TrackingViewModel(sharingBlocked = true, serviceEvents = MutableSharedFlow())
+            val viewModel =
+                TrackingViewModel(
+                    sharingBlocked = true,
+                    serviceEvents = MutableSharedFlow(),
+                    consent = MutableStateFlow(true),
+                )
             viewModel.onIntent(TrackingIntent.OptIn)
             assertEquals(TrackingState.Off, viewModel.state.value)
         }
@@ -122,7 +130,12 @@ class TrackingReducerTest {
     fun `fresh viewmodel learns that the service is already running`() =
         runTest {
             val running = MutableStateFlow<TrackingState.Active?>(TrackingState.Active(9L, TripStatus.Paused))
-            val viewModel = TrackingViewModel(serviceEvents = MutableSharedFlow(), runningNow = running)
+            val viewModel =
+                TrackingViewModel(
+                    serviceEvents = MutableSharedFlow(),
+                    runningNow = running,
+                    consent = MutableStateFlow(true),
+                )
             assertEquals(TrackingState.Active(9L, TripStatus.Paused), viewModel.state.value)
         }
 

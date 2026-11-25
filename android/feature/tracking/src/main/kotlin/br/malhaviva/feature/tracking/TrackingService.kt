@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.location.Location
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import br.malhaviva.core.domain.checkin.GeoPoint
@@ -21,8 +22,10 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -35,6 +38,8 @@ class TrackingService : Service() {
     private var pipeline: TripPipeline? = null
     private var intervalMs = SamplingPolicy.SLOW_INTERVAL_MS
     private var lastStatus = TripStatus.Waiting
+    private var consentWatch: Job? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private val callback =
         object : LocationCallback() {
@@ -73,6 +78,7 @@ class TrackingService : Service() {
         startForegroundWithNotification()
         val route = TrackingEnvironment.routeProvider.current()
         when {
+            !TrackingEnvironment.consent.granted.value -> abort(StopCause.ConsentRevoked)
             route == null -> abort(StopCause.NoRoute)
             !hasFineLocation() -> abort(StopCause.PermissionDenied)
             else -> startTrip(route)
@@ -86,6 +92,12 @@ class TrackingService : Service() {
         lastStatus = TripStatus.Waiting
         if (requestUpdates()) {
             TrackingBridge.publish(ServiceEvent.Started(now))
+            // Consentimento revogado no meio da viagem: encerra e descarta o que ainda nao foi enviado.
+            consentWatch =
+                scope.launch {
+                    TrackingEnvironment.consent.granted.first { !it }
+                    mainHandler.post { finish(StopCause.ConsentRevoked) }
+                }
         } else {
             abort(StopCause.PermissionDenied)
         }
@@ -93,6 +105,7 @@ class TrackingService : Service() {
 
     private fun abort(cause: StopCause) {
         pipeline = null
+        consentWatch?.cancel()
         TrackingBridge.publish(ServiceEvent.Stopped(cause))
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -122,9 +135,11 @@ class TrackingService : Service() {
             return
         }
         pipeline = null
+        consentWatch?.cancel()
         client.removeLocationUpdates(callback)
         TrackingBridge.publish(ServiceEvent.Stopped(cause))
-        val batches = current.finish()
+        // Sem consentimento nada sai do aparelho: o lote pendente e descartado.
+        val batches = if (cause == StopCause.ConsentRevoked) emptyList() else current.finish()
         val uploader = TrackingEnvironment.uploader
         // o servico fica em primeiro plano ate o envio terminar; lote que falha e descartado
         scope.launch {

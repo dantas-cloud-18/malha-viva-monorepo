@@ -7,6 +7,7 @@ enum class TripStatus { Waiting, Sending, Paused }
 enum class StopCause {
     UserStopped,
     PermissionDenied,
+    ConsentRevoked,
     NoRoute,
     LeftCorridor,
     StoppedOutsideStation,
@@ -22,6 +23,9 @@ fun StopReason.toCause(): StopCause =
 
 sealed interface TrackingState {
     data object Off : TrackingState
+
+    /** Consentimento de localizacao (Privacidade) ausente ou revogado: nada e pedido nem iniciado. */
+    data object NeedsConsent : TrackingState
 
     data object NeedsDisclosure : TrackingState
 
@@ -71,48 +75,97 @@ sealed interface TrackingIntent {
     ) : TrackingIntent
 
     data object Dismissed : TrackingIntent
+
+    /** Consentimento de localizacao mudou na tela de Privacidade (ou a sessao terminou). */
+    data class ConsentChanged(
+        val granted: Boolean,
+    ) : TrackingIntent
 }
 
 private fun TrackingState.running(): Boolean = this is TrackingState.Active || this == TrackingState.Starting
 
-/** Reducer puro: compartilhamento nasce desligado e so avanca pelos passos de aceite e permissao. */
+/**
+ * Reducer puro: compartilhamento nasce desligado e so avanca pelos passos de consentimento, aceite e
+ * permissao. [consentGranted] e o consentimento `location` da conta; sem ele nada avanca e, se for
+ * revogado no meio do caminho, tudo para (falha fechada).
+ */
 fun reduceTracking(
     state: TrackingState,
     intent: TrackingIntent,
-    sharingBlocked: Boolean = false,
+    sharingBlocked: Boolean,
+    consentGranted: Boolean,
 ): TrackingState =
     when (intent) {
         TrackingIntent.OptIn,
         TrackingIntent.DisclosureAccepted,
         TrackingIntent.DisclosureDeclined,
         is TrackingIntent.PermissionResult,
-        -> reduceSetup(state, intent, sharingBlocked)
+        -> reduceSetup(state, intent, sharingBlocked, consentGranted)
+        is TrackingIntent.ConsentChanged -> reduceConsent(state, intent.granted)
         else -> reduceRunning(state, intent)
     }
+
+private fun reduceConsent(
+    state: TrackingState,
+    granted: Boolean,
+): TrackingState {
+    val revokable = state.running() || state == TrackingState.NeedsDisclosure || state == TrackingState.NeedsPermission
+    return when {
+        !granted && revokable -> TrackingState.Stopped(StopCause.ConsentRevoked)
+        granted && state == TrackingState.NeedsConsent -> TrackingState.Off
+        else -> state
+    }
+}
+
+private fun dismissed(state: TrackingState): TrackingState =
+    if (state is TrackingState.Stopped || state == TrackingState.NeedsConsent) TrackingState.Off else state
 
 private fun reduceSetup(
     state: TrackingState,
     intent: TrackingIntent,
     sharingBlocked: Boolean,
+    consentGranted: Boolean,
 ): TrackingState =
     when (intent) {
-        TrackingIntent.OptIn ->
-            if (!sharingBlocked && (state == TrackingState.Off || state is TrackingState.Stopped)) {
-                TrackingState.NeedsDisclosure
-            } else {
-                state
-            }
-        TrackingIntent.DisclosureAccepted ->
-            if (state == TrackingState.NeedsDisclosure) TrackingState.NeedsPermission else state
+        TrackingIntent.OptIn -> optIn(state, sharingBlocked, consentGranted)
+        TrackingIntent.DisclosureAccepted -> disclosureAccepted(state, consentGranted)
         TrackingIntent.DisclosureDeclined ->
             if (state == TrackingState.NeedsDisclosure) TrackingState.Off else state
-        is TrackingIntent.PermissionResult ->
-            when {
-                state != TrackingState.NeedsPermission -> state
-                intent.granted -> TrackingState.Starting
-                else -> TrackingState.Stopped(StopCause.PermissionDenied)
-            }
+        is TrackingIntent.PermissionResult -> permissionResult(state, intent.granted, consentGranted)
         else -> state
+    }
+
+private fun optIn(
+    state: TrackingState,
+    sharingBlocked: Boolean,
+    consentGranted: Boolean,
+): TrackingState =
+    when {
+        sharingBlocked || !(state == TrackingState.Off || state is TrackingState.Stopped) -> state
+        !consentGranted -> TrackingState.NeedsConsent
+        else -> TrackingState.NeedsDisclosure
+    }
+
+private fun disclosureAccepted(
+    state: TrackingState,
+    consentGranted: Boolean,
+): TrackingState =
+    when {
+        state != TrackingState.NeedsDisclosure -> state
+        !consentGranted -> TrackingState.Stopped(StopCause.ConsentRevoked)
+        else -> TrackingState.NeedsPermission
+    }
+
+private fun permissionResult(
+    state: TrackingState,
+    granted: Boolean,
+    consentGranted: Boolean,
+): TrackingState =
+    when {
+        state != TrackingState.NeedsPermission -> state
+        !consentGranted -> TrackingState.Stopped(StopCause.ConsentRevoked)
+        granted -> TrackingState.Starting
+        else -> TrackingState.Stopped(StopCause.PermissionDenied)
     }
 
 private fun reduceRunning(
@@ -130,6 +183,6 @@ private fun reduceRunning(
             if (state.running()) TrackingState.Stopped(StopCause.UserStopped) else state
         is TrackingIntent.ServiceStopped ->
             if (state.running()) TrackingState.Stopped(intent.cause) else state
-        TrackingIntent.Dismissed -> if (state is TrackingState.Stopped) TrackingState.Off else state
+        TrackingIntent.Dismissed -> dismissed(state)
         else -> state
     }

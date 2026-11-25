@@ -23,6 +23,10 @@ private const val LOW_BATTERY_PERCENT = 15
 internal fun Context.hasFineLocation(): Boolean =
     checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
+internal fun Context.hasBackgroundLocation(): Boolean =
+    Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+        checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
+
 internal fun Context.batteryLow(): Boolean {
     val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
     val level = battery?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1

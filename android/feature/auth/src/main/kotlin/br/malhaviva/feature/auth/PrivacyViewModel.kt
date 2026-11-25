@@ -6,9 +6,15 @@ import br.malhaviva.feature.auth.net.ApiResult
 import br.malhaviva.feature.auth.net.PrivacyApi
 import kotlinx.coroutines.launch
 
+/** Avisado quando o servidor confirma o estado do consentimento de localizacao (carga ou alteracao). */
+fun interface LocationConsentListener {
+    fun onLocationConsent(granted: Boolean)
+}
+
 class PrivacyViewModel(
     private val session: AuthSession,
     private val privacy: PrivacyApi,
+    private val locationListener: LocationConsentListener = LocationConsentListener {},
 ) : MviViewModel<PrivacyState, PrivacyIntent>(PrivacyState()) {
     override fun reduce(
         state: PrivacyState,
@@ -35,7 +41,10 @@ class PrivacyViewModel(
 
     private suspend fun load() {
         when (val result = session.authed { privacy.getConsents(it) }) {
-            is ApiResult.Ok -> onIntent(PrivacyIntent.Loaded(result.value))
+            is ApiResult.Ok -> {
+                locationListener.onLocationConsent(result.value.isLocationGranted())
+                onIntent(PrivacyIntent.Loaded(result.value))
+            }
             is ApiResult.Fail -> onIntent(PrivacyIntent.Failed(result.error))
         }
     }
@@ -50,6 +59,9 @@ class PrivacyViewModel(
                     privacy.revokeConsent(it, intent.purpose.wire)
                 }
             }
+        if (result is ApiResult.Ok && intent.purpose == ConsentPurpose.Location) {
+            locationListener.onLocationConsent(intent.on)
+        }
         onIntent(
             when (result) {
                 is ApiResult.Ok -> PrivacyIntent.Toggled(intent.purpose, intent.on)

@@ -1,28 +1,26 @@
 package br.malhaviva.app
 
 import android.app.Application
-import br.malhaviva.core.data.net.UrlConnectionTransport
 import br.malhaviva.feature.tracking.TrackingEnvironment
 import br.malhaviva.feature.tracking.net.HttpBatchUploader
 import br.malhaviva.feature.tracking.net.NetworkRouteProvider
 import dagger.hilt.android.HiltAndroidApp
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
+import javax.inject.Inject
 
 @HiltAndroidApp
 class MalhaVivaApplication : Application() {
+    @Inject lateinit var routes: NetworkRouteProvider
+
+    @Inject lateinit var uploader: HttpBatchUploader
+
+    @Inject lateinit var consent: LocationConsentStore
+
     override fun onCreate() {
         super.onCreate()
-        val transport = UrlConnectionTransport()
-        val routes =
-            NetworkRouteProvider(
-                BuildConfig.API_BASE_URL,
-                transport,
-                CoroutineScope(SupervisorJob() + Dispatchers.IO),
-            )
+        // O servico de rastreamento vive fora da UI e le o ambiente por aqui (veja TrackingEnvironment).
         TrackingEnvironment.routeProvider = routes
-        TrackingEnvironment.uploader = HttpBatchUploader(BuildConfig.API_BASE_URL, transport, integrityTokenProvider())
+        TrackingEnvironment.uploader = uploader
+        TrackingEnvironment.consent = consent
         routes.prefetch()
     }
 }
