@@ -72,8 +72,10 @@ class AuthViewModel(
 
     private suspend fun signup(form: AuthState) {
         val email = form.email.trim().ifEmpty { null }
-        when (val result = session.signup(normalizeHandle(form.handle), form.password, email = email)) {
-            is ApiResult.Ok -> onIntent(AuthIntent.SignedUp)
+        val phone = if (isPhoneBlank(form.phone)) null else normalizePhone(form.phone)
+        val result = session.signup(normalizeHandle(form.handle), form.password, phone = phone, email = email)
+        when (result) {
+            is ApiResult.Ok -> onIntent(AuthIntent.SignedUp(withContact = phone != null || email != null))
             is ApiResult.Fail -> onIntent(AuthIntent.Failed(result.error))
         }
     }

@@ -9,28 +9,41 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import br.malhaviva.core.designsystem.MalhaVivaSpacing
 import br.malhaviva.core.designsystem.SecureScreen
 
-/** Entrada minima do fluxo de conta; a ligacao na navegacao do app fica para depois. */
+/** ViewModels dos subfluxos; cada um e reiniciado ao entrar na tela correspondente. */
+class AuthFlows(
+    val recovery: RecoveryViewModel,
+    val totp: TotpViewModel,
+    val contacts: ContactsViewModel,
+)
+
+/** Entrada do fluxo de conta; a ligacao na navegacao do app fica para depois. */
 @Composable
 fun AuthEntry(
     viewModel: AuthViewModel,
+    flows: AuthFlows,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsState()
-    AuthContent(state, viewModel::act, modifier)
+    AuthContent(state, viewModel::act, flows, modifier)
 }
 
-/** Login, MFA, cadastro e dispositivos mostram dados sensiveis: tudo sob FLAG_SECURE. */
+/** Login, MFA, cadastro, recuperacao, TOTP, contatos e dispositivos mostram dados sensiveis: tudo sob FLAG_SECURE. */
 @Composable
 fun AuthContent(
     state: AuthState,
     onIntent: (AuthIntent) -> Unit,
+    flows: AuthFlows,
     modifier: Modifier = Modifier,
 ) {
     SecureScreen {
@@ -42,19 +55,48 @@ fun AuthContent(
                 AuthScreen.Login -> LoginForm(state, onIntent)
                 AuthScreen.Mfa -> MfaForm(state, onIntent)
                 AuthScreen.Signup -> SignupForm(state, onIntent)
-                AuthScreen.EnrollmentOnly -> EnrollmentNotice(onIntent)
+                AuthScreen.EnrollmentOnly -> TotpFlow(flows.totp, enrollOnly = true, onMain = onIntent)
                 AuthScreen.Devices -> DevicesList(state, onIntent)
+                AuthScreen.Recovery -> RecoveryFlow(flows.recovery, state.handle, onIntent)
+                AuthScreen.Totp -> TotpFlow(flows.totp, enrollOnly = false, onMain = onIntent)
+                AuthScreen.Contacts -> ContactsFlow(flows.contacts, onIntent)
             }
-            StatusLine(state)
+            if (state.screen in MAIN_SCREENS) StatusLine(state.busy, state.message, state.retryAfterSeconds)
         }
     }
 }
 
+// Os subfluxos mostram a propria mensagem; as telas do fluxo principal usam a do AuthState.
+private val MAIN_SCREENS = setOf(AuthScreen.Login, AuthScreen.Mfa, AuthScreen.Signup, AuthScreen.Devices)
+
+/**
+ * Executa [open] uma vez ao entrar e dispara [onSignal] quando [signal] vira true. O sinal so vale depois
+ * do [open]: o estado do ViewModel pode trazer um sinal velho da visita anterior.
+ */
 @Composable
-private fun StatusLine(state: AuthState) {
-    if (state.busy) Text(stringResource(R.string.auth_loading), style = MaterialTheme.typography.bodyMedium)
-    state.message?.let {
-        Text(messageText(it, state.retryAfterSeconds), color = MaterialTheme.colorScheme.error)
+internal fun FlowEffects(
+    open: () -> Unit,
+    signal: Boolean,
+    onSignal: () -> Unit,
+) {
+    var opened by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        open()
+        opened = true
+    }
+    LaunchedEffect(opened, signal) { if (opened && signal) onSignal() }
+}
+
+@Composable
+internal fun StatusLine(
+    busy: Boolean,
+    message: AuthMessage?,
+    retryAfterSeconds: Long?,
+) {
+    if (busy) Text(stringResource(R.string.auth_loading), style = MaterialTheme.typography.bodyMedium)
+    message?.let {
+        val color = if (it.isNotice) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+        Text(messageText(it, retryAfterSeconds), color = color)
     }
 }
 
@@ -89,4 +131,18 @@ private val MESSAGE_RES =
         AuthMessage.Generic to R.string.auth_msg_generic,
         AuthMessage.SessionExpired to R.string.auth_msg_session_expired,
         AuthMessage.AccountCreated to R.string.auth_msg_account_created,
+        AuthMessage.AccountCreatedVerify to R.string.auth_msg_account_created_verify,
+        AuthMessage.InvalidCode to R.string.auth_msg_invalid_code,
+        AuthMessage.InvalidCredentials to R.string.auth_msg_invalid_credentials,
+        AuthMessage.AdminMfaMandatory to R.string.auth_msg_admin_mfa_mandatory,
+        AuthMessage.EnrollmentCodeRequired to R.string.auth_msg_enrollment_code_required,
+        AuthMessage.RecoveryRequested to R.string.auth_msg_recovery_requested,
+        AuthMessage.RecoveryDone to R.string.auth_msg_recovery_done,
+        AuthMessage.EnrollmentDone to R.string.auth_msg_enrollment_done,
+        AuthMessage.TotpDisabled to R.string.auth_msg_totp_disabled,
+        AuthMessage.CodesRegenerated to R.string.auth_msg_codes_regenerated,
+        AuthMessage.ContactSent to R.string.auth_msg_contact_sent,
+        AuthMessage.ContactConfirmed to R.string.auth_msg_contact_confirmed,
+        AuthMessage.ContactChangePending to R.string.auth_msg_contact_change_pending,
+        AuthMessage.ContactChangeCanceled to R.string.auth_msg_contact_change_canceled,
     )

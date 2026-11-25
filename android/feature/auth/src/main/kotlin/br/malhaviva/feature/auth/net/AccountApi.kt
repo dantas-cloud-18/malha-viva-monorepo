@@ -12,15 +12,15 @@ class AccountApi(
     private val client = JsonClient(transport, baseUrl)
 
     suspend fun listDevices(accessToken: String): ApiResult<List<Device>> =
-        call("GET", "/me/devices", accessToken, ::devices)
+        client.call("GET", "/me/devices", accessToken, ::devices)
 
     suspend fun revokeDevice(
         accessToken: String,
         deviceId: String,
-    ): ApiResult<Unit> = call("DELETE", "/me/devices/$deviceId", accessToken, { })
+    ): ApiResult<Unit> = client.call("DELETE", "/me/devices/$deviceId", accessToken, { })
 
     suspend fun getContacts(accessToken: String): ApiResult<ContactsState> =
-        call("GET", "/me/contacts", accessToken, obj(::contactsState))
+        client.call("GET", "/me/contacts", accessToken, obj(::contactsState))
 
     /** `currentPassword` e obrigatoria em toda operacao: um access token roubado nao basta. */
     suspend fun setContact(
@@ -29,7 +29,7 @@ class AccountApi(
         value: String,
         currentPassword: String,
     ): ApiResult<ContactChangeStarted> =
-        call("POST", "/me/contacts", accessToken, obj(::contactChange)) {
+        client.call("POST", "/me/contacts", accessToken, obj(::contactChange)) {
             put("channel", channel)
             put("value", value)
             put("current_password", currentPassword)
@@ -42,7 +42,7 @@ class AccountApi(
         changeId: String? = null,
         currentPassword: String? = null,
     ): ApiResult<Unit> =
-        call("POST", "/me/contacts/confirm", accessToken, { }) {
+        client.call("POST", "/me/contacts/confirm", accessToken, { }) {
             put("channel", channel)
             put("code", code)
             changeId?.let { put("change_id", it) }
@@ -52,38 +52,45 @@ class AccountApi(
     suspend fun cancelContactChange(
         accessToken: String,
         changeId: String,
-    ): ApiResult<Unit> = call("DELETE", "/me/contact-changes/$changeId", accessToken, { })
+    ): ApiResult<Unit> = client.call("DELETE", "/me/contact-changes/$changeId", accessToken, { })
 
     suspend fun startTotp(
         accessToken: String,
         enrollmentCode: String? = null,
     ): ApiResult<TotpEnrollment> =
-        call("POST", "/me/mfa/totp", accessToken, obj(::totpEnrollment)) {
+        client.call("POST", "/me/mfa/totp", accessToken, obj(::totpEnrollment)) {
             enrollmentCode?.let { put("enrollment_code", it) }
         }
 
+    /** Devolve os 10 codigos de backup, em claro so desta vez. */
     suspend fun confirmTotp(
         accessToken: String,
         code: String,
-    ): ApiResult<Unit> = call("POST", "/me/mfa/totp/confirm", accessToken, { }) { put("code", code) }
+    ): ApiResult<List<String>> =
+        client.call("POST", "/me/mfa/totp/confirm", accessToken, obj(::backupCodes)) { put("code", code) }
+
+    /** Senha mais exatamente um entre `code` (TOTP) e `backupCode`; devolve um lote novo de 10 codigos. */
+    suspend fun regenerateBackupCodes(
+        accessToken: String,
+        password: String,
+        code: String? = null,
+        backupCode: String? = null,
+    ): ApiResult<List<String>> =
+        client.call("POST", "/me/mfa/totp/backup-codes", accessToken, obj(::backupCodes)) {
+            put("password", password)
+            code?.let { put("code", it) }
+            backupCode?.let { put("backup_code", it) }
+        }
 
     suspend fun disableTotp(
         accessToken: String,
         password: String,
         code: String,
     ): ApiResult<Unit> =
-        call("POST", "/me/mfa/totp/disable", accessToken, { }) {
+        client.call("POST", "/me/mfa/totp/disable", accessToken, { }) {
             put("password", password)
             put("code", code)
         }
-
-    private suspend fun <T> call(
-        method: String,
-        path: String,
-        accessToken: String,
-        parse: (String) -> T,
-        body: (JSONObject.() -> Unit)? = null,
-    ): ApiResult<T> = client.call(method, path, accessToken, parse, body)
 }
 
 private fun devices(body: String): List<Device> =
@@ -126,3 +133,6 @@ private fun contactChange(json: JSONObject) =
     )
 
 private fun totpEnrollment(json: JSONObject) = TotpEnrollment(json.getString("secret"), json.getString("otpauth_uri"))
+
+private fun backupCodes(json: JSONObject): List<String> =
+    json.getJSONArray("backup_codes").let { array -> (0 until array.length()).map { array.getString(it) } }

@@ -6,7 +6,14 @@ import br.malhaviva.core.data.net.HttpTransport
 import br.malhaviva.core.data.secure.InMemorySecretStore
 import br.malhaviva.feature.auth.net.AccountApi
 import br.malhaviva.feature.auth.net.AuthApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
 import org.json.JSONObject
+import org.junit.rules.TestWatcher
+import org.junit.runner.Description
 import java.io.IOException
 
 /** Transporte falso: respostas em fila por "METODO /caminho"; sem resposta na fila lanca erro. */
@@ -73,4 +80,21 @@ class TestEnv(
     val api = AuthApi("http://host:8080/", transport)
     val account = AccountApi("http://host:8080/", transport)
     val session = AuthSession(api, secrets, { captcha })
+    val recovery = AccountRecovery(api, { captcha }, session)
+}
+
+/** Troca o Dispatchers.Main por um despachante imediato: o viewModelScope roda no proprio teste. */
+@OptIn(ExperimentalCoroutinesApi::class)
+class MainRule : TestWatcher() {
+    override fun starting(description: Description) = Dispatchers.setMain(UnconfinedTestDispatcher())
+
+    override fun finished(description: Description) = Dispatchers.resetMain()
+}
+
+fun codesJson(prefix: String = "ABCDEFGH") = """{"backup_codes":[${(2..11).joinToString(",") { "\"$prefix$it\"" }}]}"""
+
+/** Entra com resposta de sucesso simples; deixa a sessao em LoggedIn com access "acc". */
+suspend fun TestEnv.signIn() {
+    transport.on("POST /auth/token", json(200, tokenBody("acc", "ref")))
+    session.login("@ana", "senha-longa-1", null)
 }

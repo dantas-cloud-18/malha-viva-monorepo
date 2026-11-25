@@ -69,6 +69,18 @@ sealed interface AuthError {
 
     data object AdminMfaRequired : AuthError
 
+    /** 400 `invalid_or_expired_code`: OTP errado, vencido ou ausente (igual para handle inexistente). */
+    data object InvalidCode : AuthError
+
+    /** 403 `invalid_credentials`: senha ou segundo fator errado em operacao de TOTP. */
+    data object InvalidCredentials : AuthError
+
+    /** 403 `admin_mfa_mandatory`: conta admin nao pode desligar o TOTP. */
+    data object AdminMfaMandatory : AuthError
+
+    /** 403 `enrollment_code_required`: admin sem o codigo de enrolamento valido. */
+    data object EnrollmentCodeRequired : AuthError
+
     /** Cadastro com contato sem CAPTCHA disponivel neste build; nenhuma requisicao e feita. */
     data object CaptchaUnavailable : AuthError
 

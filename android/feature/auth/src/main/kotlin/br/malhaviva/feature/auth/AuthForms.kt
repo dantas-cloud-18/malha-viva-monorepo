@@ -20,10 +20,10 @@ import br.malhaviva.core.designsystem.CheckInButton
 import br.malhaviva.core.designsystem.MalhaVivaTheme
 
 @Composable
-private fun Title(text: String) = Text(text, style = MaterialTheme.typography.headlineSmall)
+internal fun Title(text: String) = Text(text, style = MaterialTheme.typography.headlineSmall)
 
 @Composable
-private fun Field(
+internal fun Field(
     label: String,
     value: String,
     onChange: (String) -> Unit,
@@ -42,7 +42,7 @@ private fun Field(
 }
 
 @Composable
-private fun Hint(text: String) =
+internal fun Hint(text: String) =
     Text(text, style = MaterialTheme.typography.bodySmall, color = MalhaVivaTheme.colors.textMuted)
 
 @Composable
@@ -59,6 +59,7 @@ internal fun LoginForm(
         onIntent(AuthIntent.SubmitLogin)
     }, enabled = state.canSubmitLogin)
     TextButton({ onIntent(AuthIntent.GoSignup) }) { Text(stringResource(R.string.auth_go_signup)) }
+    TextButton({ onIntent(AuthIntent.GoRecovery) }) { Text(stringResource(R.string.auth_go_recovery)) }
 }
 
 @Composable
@@ -79,6 +80,13 @@ internal fun SignupForm(
         { onIntent(AuthIntent.EmailChanged(it)) },
         keyboardType = KeyboardType.Email,
     )
+    Field(
+        stringResource(R.string.auth_phone_label),
+        state.phone,
+        { onIntent(AuthIntent.PhoneChanged(it)) },
+        keyboardType = KeyboardType.Phone,
+    )
+    Hint(stringResource(R.string.auth_phone_hint))
     CheckInButton(stringResource(R.string.auth_signup_action), {
         onIntent(AuthIntent.SubmitSignup)
     }, enabled = state.canSubmitSignup)
@@ -108,13 +116,6 @@ internal fun MfaForm(
 }
 
 @Composable
-internal fun EnrollmentNotice(onIntent: (AuthIntent) -> Unit) {
-    Title(stringResource(R.string.auth_enroll_title))
-    Text(stringResource(R.string.auth_enroll_message), style = MaterialTheme.typography.bodyLarge)
-    TextButton({ onIntent(AuthIntent.GoLogin) }) { Text(stringResource(R.string.auth_back)) }
-}
-
-@Composable
 internal fun DevicesList(
     state: AuthState,
     onIntent: (AuthIntent) -> Unit,
@@ -132,5 +133,7 @@ internal fun DevicesList(
             }
         }
     }
+    TextButton({ onIntent(AuthIntent.GoContacts) }) { Text(stringResource(R.string.auth_go_contacts)) }
+    TextButton({ onIntent(AuthIntent.GoTotp) }) { Text(stringResource(R.string.auth_go_totp)) }
     TextButton({ onIntent(AuthIntent.Logout) }) { Text(stringResource(R.string.auth_logout)) }
 }

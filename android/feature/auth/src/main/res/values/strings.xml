@@ -6,6 +6,7 @@
     <string name="auth_password_hint">Use de 8 a 128 caracteres. Não exigimos letras maiúsculas, números ou símbolos: uma frase longa é melhor.</string>
     <string name="auth_login_action">Entrar</string>
     <string name="auth_go_signup">Criar conta</string>
+    <string name="auth_go_recovery">Esqueci minha senha</string>
     <string name="auth_go_login">Já tenho conta</string>
     <string name="auth_back">Voltar</string>
     <string name="auth_loading">Aguarde…</string>
@@ -20,22 +21,26 @@
     <string name="auth_signup_title">Criar conta</string>
     <string name="auth_signup_handle_hint">O @nome é público. Use de 3 a 20 letras, números ou _.</string>
     <string name="auth_email_label">E-mail para recuperação (opcional)</string>
+    <string name="auth_phone_label">Telefone com DDI (opcional)</string>
+    <string name="auth_phone_hint">Formato internacional, por exemplo +5511999998888. Com telefone ou e-mail, enviamos um código de confirmação.</string>
     <string name="auth_signup_action">Criar conta</string>
 
     <string name="auth_enroll_title">Ative a verificação em duas etapas</string>
-    <string name="auth_enroll_message">Contas de administrador precisam do segundo fator. Configure o app autenticador e entre de novo.</string>
+    <string name="auth_enroll_message">Contas de administrador precisam do segundo fator. Informe o código de ativação entregue pela equipe, configure o app autenticador e entre de novo.</string>
 
     <string name="auth_devices_title">Dispositivos conectados</string>
     <string name="auth_devices_empty">Nenhum dispositivo na lista.</string>
     <string name="auth_devices_last_used">Último uso: %1$s</string>
     <string name="auth_device_revoke">Desconectar</string>
     <string name="auth_logout">Sair deste aparelho</string>
+    <string name="auth_go_contacts">Contatos de recuperação</string>
+    <string name="auth_go_totp">Verificação em duas etapas</string>
 
     <string name="auth_msg_bad_credentials">@nome ou senha incorretos.</string>
     <string name="auth_msg_invalid_mfa">Código incorreto ou vencido. Se vencer, volte e entre de novo.</string>
     <string name="auth_msg_invalid_password">Senha atual incorreta.</string>
     <string name="auth_msg_captcha_required">Verificação anti-robô necessária. Tente de novo em instantes.</string>
-    <string name="auth_msg_captcha_unavailable">A verificação anti-robô ainda não está disponível nesta versão do app. Cadastre-se sem e-mail ou tente mais tarde.</string>
+    <string name="auth_msg_captcha_unavailable">A verificação anti-robô ainda não está disponível nesta versão do app. Cadastre-se sem telefone nem e-mail ou tente mais tarde.</string>
     <string name="auth_msg_admin_mfa">Esta área exige verificação em duas etapas.</string>
     <string name="auth_msg_too_large">Os dados enviados são grandes demais.</string>
     <string name="auth_msg_rate_limited">Muitas tentativas. Aguarde um pouco e tente de novo.</string>
@@ -46,4 +51,68 @@
     <string name="auth_msg_generic">Algo deu errado. Tente de novo.</string>
     <string name="auth_msg_session_expired">Sua sessão terminou. Entre de novo.</string>
     <string name="auth_msg_account_created">Conta criada. Entre para continuar.</string>
+    <string name="auth_msg_account_created_verify">Conta criada. Enviamos um código ao contato informado. Entre e confirme-o em Contatos para poder usá-lo na recuperação.</string>
+    <string name="auth_msg_invalid_code">Código incorreto ou vencido. Confira e tente de novo.</string>
+    <string name="auth_msg_invalid_credentials">Senha ou código incorretos.</string>
+    <string name="auth_msg_admin_mfa_mandatory">Contas de administrador não podem desligar a verificação em duas etapas.</string>
+    <string name="auth_msg_enrollment_code_required">Informe o código de ativação entregue pela equipe.</string>
+    <string name="auth_msg_recovery_requested">Se a conta existir, enviamos códigos aos contatos verificados. Digite abaixo os que chegarem.</string>
+    <string name="auth_msg_recovery_done">Senha trocada. Todas as sessões foram encerradas: entre de novo em cada aparelho.</string>
+    <string name="auth_msg_enrollment_done">Verificação em duas etapas ativada. Entre de novo para continuar.</string>
+    <string name="auth_msg_totp_disabled">Verificação em duas etapas desligada.</string>
+    <string name="auth_msg_codes_regenerated">Códigos novos gerados. Os antigos não valem mais.</string>
+    <string name="auth_msg_contact_sent">Enviamos um código de 6 dígitos ao contato. Digite-o abaixo.</string>
+    <string name="auth_msg_contact_confirmed">Contato confirmado.</string>
+    <string name="auth_msg_contact_change_pending">Troca pendente: ela vale 24 horas depois do pedido e pode ser cancelada aqui até lá.</string>
+    <string name="auth_msg_contact_change_canceled">Troca cancelada.</string>
+
+    <string name="auth_recovery_title">Recuperar conta</string>
+    <string name="auth_recovery_request_info">Informe seu @nome. Se a conta existir, enviamos um código a cada contato verificado.</string>
+    <string name="auth_recovery_request_action">Enviar códigos</string>
+    <string name="auth_recovery_phone_code">Código recebido por SMS</string>
+    <string name="auth_recovery_email_code">Código recebido por e-mail</string>
+    <string name="auth_recovery_codes_hint">Digite o código de cada contato que recebeu um. Se você verificou telefone e e-mail, os dois são necessários.</string>
+    <string name="auth_recovery_new_password">Nova senha</string>
+    <string name="auth_recovery_complete_action">Trocar senha</string>
+    <string name="auth_recovery_complete_hint">Trocar a senha encerra todas as sessões abertas.</string>
+
+    <string name="auth_totp_title">Verificação em duas etapas</string>
+    <string name="auth_totp_menu_enable">Ativar com app autenticador</string>
+    <string name="auth_totp_menu_regenerate">Gerar novos códigos de backup</string>
+    <string name="auth_totp_menu_disable">Desligar</string>
+    <string name="auth_totp_start_info">Vamos gerar um segredo para o app autenticador. Ele aparece uma única vez.</string>
+    <string name="auth_totp_enrollment_code">Código de ativação (administradores)</string>
+    <string name="auth_totp_start_action">Gerar segredo</string>
+    <string name="auth_totp_secret_title">Segredo para digitar no app autenticador</string>
+    <string name="auth_totp_uri_title">Endereço otpauth (toque e segure para copiar)</string>
+    <string name="auth_totp_confirm_label">Código de 6 dígitos do app</string>
+    <string name="auth_totp_confirm_action">Ativar</string>
+    <string name="auth_totp_codes_title">Seus códigos de backup</string>
+    <string name="auth_totp_codes_warning">Guarde estes 10 códigos num lugar seguro. Cada um vale uma vez e eles não aparecem de novo.</string>
+    <string name="auth_totp_codes_copy">Copiar todos</string>
+    <string name="auth_totp_codes_saved">Guardei os códigos</string>
+    <string name="auth_totp_regenerate_info">Gerar novos códigos apaga os antigos. Confirme com a senha e um código do app ou um código de backup.</string>
+    <string name="auth_totp_regenerate_action">Gerar códigos novos</string>
+    <string name="auth_totp_disable_info">Para desligar, confirme com a senha e o código do app autenticador.</string>
+    <string name="auth_totp_disable_action">Desligar verificação</string>
+
+    <string name="auth_contacts_title">Contatos de recuperação</string>
+    <string name="auth_contacts_phone">Telefone</string>
+    <string name="auth_contacts_email">E-mail</string>
+    <string name="auth_contacts_verified">Verificado</string>
+    <string name="auth_contacts_unverified">Não verificado</string>
+    <string name="auth_contacts_add">Adicionar ou trocar</string>
+    <string name="auth_contacts_have_code">Já tenho o código</string>
+    <string name="auth_contacts_pending_title">Trocas pendentes</string>
+    <string name="auth_contacts_pending_item">%1$s, vale a partir de %2$s</string>
+    <string name="auth_contacts_pending_unconfirmed">código ainda não confirmado</string>
+    <string name="auth_contacts_enter_code">Digitar código</string>
+    <string name="auth_contacts_cancel_change">Cancelar troca</string>
+    <string name="auth_contacts_add_hint">Pedimos sua senha atual em toda inclusão ou troca. Trocar um contato já verificado só vale depois de 24 horas.</string>
+    <string name="auth_contacts_value_phone">Telefone com DDI</string>
+    <string name="auth_contacts_value_email">E-mail</string>
+    <string name="auth_contacts_current_password">Senha atual</string>
+    <string name="auth_contacts_send_action">Enviar código</string>
+    <string name="auth_contacts_code_label">Código de 6 dígitos</string>
+    <string name="auth_contacts_confirm_action">Confirmar contato</string>
 </resources>

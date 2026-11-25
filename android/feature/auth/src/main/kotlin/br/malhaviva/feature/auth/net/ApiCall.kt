@@ -8,6 +8,7 @@ import org.json.JSONObject
 import java.io.IOException
 
 private val SUCCESS = 200..299
+private const val STATUS_BAD_REQUEST = 400
 private const val STATUS_UNAUTHORIZED = 401
 private const val STATUS_FORBIDDEN = 403
 private const val STATUS_NOT_FOUND = 404
@@ -58,15 +59,22 @@ internal fun HttpResponse.toError(): AuthError {
         STATUS_TOO_MANY -> AuthError.RateLimited(headers["retry-after"]?.trim()?.toLongOrNull()?.takeIf { it >= 0 })
         STATUS_TOO_LARGE -> AuthError.PayloadTooLarge
         STATUS_UNAUTHORIZED -> if (code == "invalid_mfa") AuthError.InvalidMfa else AuthError.Unauthorized
-        STATUS_FORBIDDEN ->
-            when (code) {
-                "invalid_password" -> AuthError.InvalidPassword
-                "captcha_required" -> AuthError.CaptchaRequired
-                "admin_mfa_required" -> AuthError.AdminMfaRequired
-                else -> AuthError.Rejected(status, code)
-            }
+        STATUS_FORBIDDEN -> forbiddenError(code)
+        STATUS_BAD_REQUEST ->
+            if (code == "invalid_or_expired_code") AuthError.InvalidCode else AuthError.Rejected(status, code)
         STATUS_NOT_FOUND -> AuthError.NotFound
         STATUS_CONFLICT -> AuthError.Conflict
         else -> AuthError.Rejected(status, code)
     }
 }
+
+private fun HttpResponse.forbiddenError(code: String?): AuthError =
+    when (code) {
+        "invalid_password" -> AuthError.InvalidPassword
+        "invalid_credentials" -> AuthError.InvalidCredentials
+        "captcha_required" -> AuthError.CaptchaRequired
+        "admin_mfa_required" -> AuthError.AdminMfaRequired
+        "admin_mfa_mandatory" -> AuthError.AdminMfaMandatory
+        "enrollment_code_required" -> AuthError.EnrollmentCodeRequired
+        else -> AuthError.Rejected(status, code)
+    }

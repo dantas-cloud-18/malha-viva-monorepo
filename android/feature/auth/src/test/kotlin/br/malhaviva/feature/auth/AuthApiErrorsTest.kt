@@ -36,6 +36,16 @@ class AuthApiErrorsTest {
             assertEquals(AuthError.InvalidPassword, errorFor(problem(403, "invalid_password")))
             assertEquals(AuthError.CaptchaRequired, errorFor(problem(403, "captcha_required")))
             assertEquals(AuthError.AdminMfaRequired, errorFor(problem(403, "admin_mfa_required")))
+            assertEquals(AuthError.InvalidCredentials, errorFor(problem(403, "invalid_credentials")))
+            assertEquals(AuthError.AdminMfaMandatory, errorFor(problem(403, "admin_mfa_mandatory")))
+            assertEquals(AuthError.EnrollmentCodeRequired, errorFor(problem(403, "enrollment_code_required")))
+        }
+
+    @Test
+    fun `400 invalid_or_expired_code maps to InvalidCode and other 400s stay rejected`() =
+        runTest {
+            assertEquals(AuthError.InvalidCode, errorFor(problem(400, "invalid_or_expired_code")))
+            assertEquals(AuthError.Rejected(400, null), errorFor(problem(400)))
         }
 
     @Test
