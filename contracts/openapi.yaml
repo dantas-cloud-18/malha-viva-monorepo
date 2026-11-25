@@ -781,6 +781,10 @@ paths:
         servidor (`MALHAVIVA_STATION_MIN_CONTRIBUTORS`, mínimo 5). Degraus: K a 9 = low, 10 a 19 = medium,
         20 ou mais = high (o degrau mais baixo já exige K). O número exato nunca é exposto e nenhum campo
         identifica passageiro, dispositivo ou conta. Toda estação do corredor aparece na lista, com ou sem dado.
+        Anti-diferenciação (RIPD 7.1): o nível é atrasado e suavizado, não instantâneo. Uma mudança entre degraus
+        visíveis, ou de `null` para um nível, só é publicada depois de 60 s com o novo nível estável, e a contagem
+        precisa sair da faixa atual por mais de 2 viagens (histerese). Cair abaixo de K publica `null` na hora,
+        nunca um nível sob K.
       parameters:
         - $ref: "#/components/parameters/Corridor"
         - in: query
