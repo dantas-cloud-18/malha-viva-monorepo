@@ -9,6 +9,7 @@ Controlador: [RAZÃO SOCIAL]. Encarregado: [E-MAIL DO ENCARREGADO]. Versão 0.1.
 | Dado | Onde | Prazo | Mecanismo | Estado |
 |---|---|---|---|---|
 | Conta (handle, hash de senha, telefone, e-mail, verificações) | `accounts` | Enquanto a conta estiver ativa. Após exclusão pelo titular: eliminação imediata dos dados de conta, exceto o que a lei obrigar a guardar [A CONFIRMAR] | `DELETE` em `accounts`; as FKs `ON DELETE CASCADE` apagam `refresh_tokens`, `devices`, `otp_codes`, `contact_changes`, `totp_secrets`, `totp_backup_codes` | Cascata existe no esquema. **Rota de exclusão e teste automatizado: NAO IMPLEMENTADO** |
+| Gênero (opcional) | `accounts.gender` (V12) | Enquanto a conta estiver ativa, ou até o titular apagar ou mudar o campo | Apagado (`NULL`) na exclusão da conta, na mesma transação que anonimiza `accounts` | Implementado e testado (`LgpdRoutesTest`) |
 | Conta inativa | `accounts` | Proposta: eliminar após [N] meses sem login, com aviso prévio por contato verificado | Job periódico | NAO IMPLEMENTADO. Prazo a decidir |
 | Posições brutas | `telemetry_points` | **24 h** (nenhum ponto vive mais que retenção + 1 h) | Partição por hora, `telemetry_maintain_partitions` faz DROP, chamada pelo backend a cada hora | Implementado (`PartitionMaintenance`). Teste ponta a ponta do TTL: a fazer |
 | Posições em memória (`LiveHub`) | Memória do servidor | Sem persistência; reinício zera | — | Implementado |
