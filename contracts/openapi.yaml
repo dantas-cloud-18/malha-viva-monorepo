@@ -767,6 +767,35 @@ paths:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
 
+  /corridors/{corridor}/stations/crowding:
+    get:
+      tags: [realtime]
+      operationId: listStationCrowding
+      summary: Lotação das estações (polling)
+      security: []
+      description: >
+        Nível grosso de lotação de cada estação do corredor em um sentido, derivado de viagens anônimas paradas na
+        estação (velocidade até 1 m/s e até 100 m da estação ao longo da via) na janela de 30 s. Cada viagem conta
+        uma vez, por id efêmero. k-anonimato (RIPD R3): o nível só é publicado quando há pelo menos K viagens
+        anônimas distintas; abaixo disso `level` vem `null` ("sem dados de lotação"). K padrão 5, configurável no
+        servidor (`MALHAVIVA_STATION_MIN_CONTRIBUTORS`, mínimo 5). Degraus: K a 9 = low, 10 a 19 = medium,
+        20 ou mais = high (o degrau mais baixo já exige K). O número exato nunca é exposto e nenhum campo
+        identifica passageiro, dispositivo ou conta. Toda estação do corredor aparece na lista, com ou sem dado.
+      parameters:
+        - $ref: "#/components/parameters/Corridor"
+        - in: query
+          name: direction
+          required: true
+          schema: { $ref: "#/components/schemas/Direction" }
+      responses:
+        "200":
+          description: Lotação atual por estação.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StationCrowdingSnapshot" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
   # ---- Fase 5: LGPD e menores ------------------------------------------------------------------------------------
   /auth/parental-consent/confirm:
     post:
@@ -1295,6 +1324,31 @@ components:
         trains:
           type: array
           items: { $ref: "#/components/schemas/TrainState" }
+
+    CrowdingLevel:
+      type: string
+      enum: [low, medium, high]
+      description: >
+        Faixa grossa de lotação (K a 9 viagens = low, 10 a 19 = medium, 20 ou mais = high). Nunca a contagem exata.
+    StationCrowding:
+      type: object
+      required: [station_id, level]
+      properties:
+        station_id: { type: string }
+        level:
+          description: "`null` = sem dados de lotação (menos de K viagens anônimas distintas na estação)."
+          oneOf:
+            - { $ref: "#/components/schemas/CrowdingLevel" }
+            - { type: "null" }
+    StationCrowdingSnapshot:
+      type: object
+      required: [corridor, direction, stations]
+      properties:
+        corridor: { $ref: "#/components/schemas/Corridor" }
+        direction: { $ref: "#/components/schemas/Direction" }
+        stations:
+          type: array
+          items: { $ref: "#/components/schemas/StationCrowding" }
 
     CorridorNetwork:
       type: object
