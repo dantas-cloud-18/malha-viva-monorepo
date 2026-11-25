@@ -44,19 +44,40 @@ class AuthApi(
     suspend fun logout(refreshToken: String): ApiResult<Unit> =
         call("/auth/logout", { }) { put("refresh_token", refreshToken) }
 
+    /** Devolve true quando a conta nasceu `pending_parental_consent` (menor de 12 anos). */
     suspend fun createAccount(
-        handle: String,
-        password: String,
-        phone: String? = null,
-        email: String? = null,
+        account: NewAccount,
         captchaToken: String? = null,
-    ): ApiResult<Unit> =
-        call("/auth/accounts", { }) {
-            put("handle", handle)
-            put("password", password)
-            phone?.let { put("phone", it) }
-            email?.let { put("email", it) }
+    ): ApiResult<Boolean> =
+        call("/auth/accounts", obj { it.optString("status") == "pending_parental_consent" }) {
+            put("handle", account.handle)
+            put("password", account.password)
+            put("birth_date", account.birthDate)
+            account.guardian?.let {
+                put("guardian", JSONObject().put("channel", it.channel).put("value", it.value))
+            }
+            account.phone?.let { put("phone", it) }
+            account.email?.let { put("email", it) }
             captchaToken?.let { put("captcha_token", it) }
+        }
+
+    suspend fun confirmParentalConsent(
+        handle: String,
+        code: String,
+    ): ApiResult<Unit> =
+        call("/auth/parental-consent/confirm", { }) {
+            put("handle", handle)
+            put("code", code)
+        }
+
+    /** O servidor exige `captcha_token` sempre; a resposta (202) nunca diz se a conta existe. */
+    suspend fun resendParentalConsent(
+        handle: String,
+        captchaToken: String,
+    ): ApiResult<Unit> =
+        call("/auth/parental-consent/resend", { }) {
+            put("handle", handle)
+            put("captcha_token", captchaToken)
         }
 
     suspend fun requestRecovery(

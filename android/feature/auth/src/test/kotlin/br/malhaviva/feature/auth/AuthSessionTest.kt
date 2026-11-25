@@ -3,6 +3,7 @@ package br.malhaviva.feature.auth
 import br.malhaviva.feature.auth.net.ApiResult
 import br.malhaviva.feature.auth.net.AuthError
 import br.malhaviva.feature.auth.net.LoginOutcome
+import br.malhaviva.feature.auth.net.NewAccount
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -110,7 +111,10 @@ class AuthSessionTest {
     fun `signup with contact is blocked without captcha provider and sends nothing`() =
         runTest {
             val release = TestEnv(captcha = null)
-            val result = release.session.signup("@ana", "senha-longa-1", email = "ana@example.com")
+            val result =
+                release.session.signup(
+                    NewAccount("@ana", "senha-longa-1", ADULT_BIRTH, email = "ana@example.com"),
+                )
             assertEquals(AuthError.CaptchaUnavailable, result.error())
             assertTrue(release.transport.requests.isEmpty())
         }
@@ -123,7 +127,7 @@ class AuthSessionTest {
                 "POST /auth/accounts",
                 json(201, ACCOUNT_JSON),
             )
-            release.session.signup("@ana", "senha-longa-1").value()
+            release.session.signup(NewAccount("@ana", "senha-longa-1", ADULT_BIRTH)).value()
             assertFalse(release.transport.bodyOf(release.transport.requests.single()).has("captcha_token"))
         }
 
@@ -134,7 +138,7 @@ class AuthSessionTest {
                 "POST /auth/accounts",
                 json(201, ACCOUNT_JSON),
             )
-            env.session.signup("@ana", "senha-longa-1", email = "ana@example.com").value()
+            env.session.signup(NewAccount("@ana", "senha-longa-1", ADULT_BIRTH, email = "ana@example.com")).value()
             val body = t.bodyOf(t.requests.single())
             assertEquals("captcha-ok", body.getString("captcha_token"))
             assertEquals("ana@example.com", body.getString("email"))

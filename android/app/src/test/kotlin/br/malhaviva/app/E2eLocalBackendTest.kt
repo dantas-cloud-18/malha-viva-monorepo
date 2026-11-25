@@ -13,6 +13,7 @@ import br.malhaviva.feature.auth.net.ApiResult
 import br.malhaviva.feature.auth.net.AuthApi
 import br.malhaviva.feature.auth.net.AuthError
 import br.malhaviva.feature.auth.net.LoginOutcome
+import br.malhaviva.feature.auth.net.NewAccount
 import br.malhaviva.feature.tracking.net.BatchSigner
 import br.malhaviva.feature.tracking.net.HttpBatchUploader
 import kotlinx.coroutines.delay
@@ -56,7 +57,7 @@ class E2eLocalBackendTest {
             val password = "E2e-" + java.util.UUID.randomUUID() // gerada por rodada; nunca fixa no codigo
 
             // cadastro e login simples
-            assertOk(session.signup(handle, password))
+            assertOk(session.signup(NewAccount(handle, password, "1990-01-01"))) // adulto: sem responsavel
             assertOk(patient { session.login(handle, password, "e2e") })
             assertEquals(SessionState.LoggedIn, session.state.value)
 

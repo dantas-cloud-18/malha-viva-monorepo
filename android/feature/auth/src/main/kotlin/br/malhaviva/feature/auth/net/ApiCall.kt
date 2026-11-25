@@ -61,9 +61,13 @@ internal fun HttpResponse.toError(): AuthError {
         STATUS_UNAUTHORIZED -> if (code == "invalid_mfa") AuthError.InvalidMfa else AuthError.Unauthorized
         STATUS_FORBIDDEN -> forbiddenError(code)
         STATUS_BAD_REQUEST ->
-            if (code == "invalid_or_expired_code") AuthError.InvalidCode else AuthError.Rejected(status, code)
+            if (code == "invalid_or_expired_code") {
+                AuthError.InvalidCode
+            } else {
+                AuthError.Rejected(status, code)
+            }
         STATUS_NOT_FOUND -> AuthError.NotFound
-        STATUS_CONFLICT -> AuthError.Conflict
+        STATUS_CONFLICT -> if (code == "policy_version_mismatch") AuthError.PolicyMismatch else AuthError.Conflict
         else -> AuthError.Rejected(status, code)
     }
 }
@@ -76,5 +80,7 @@ private fun HttpResponse.forbiddenError(code: String?): AuthError =
         "admin_mfa_required" -> AuthError.AdminMfaRequired
         "admin_mfa_mandatory" -> AuthError.AdminMfaMandatory
         "enrollment_code_required" -> AuthError.EnrollmentCodeRequired
+        "parental_consent_pending" -> AuthError.ParentalConsentPending
+        "marketing_forbidden_for_minors" -> AuthError.MarketingForbiddenForMinors
         else -> AuthError.Rejected(status, code)
     }

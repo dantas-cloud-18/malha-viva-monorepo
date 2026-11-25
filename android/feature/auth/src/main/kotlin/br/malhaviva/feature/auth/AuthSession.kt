@@ -5,6 +5,7 @@ import br.malhaviva.feature.auth.net.ApiResult
 import br.malhaviva.feature.auth.net.AuthApi
 import br.malhaviva.feature.auth.net.AuthError
 import br.malhaviva.feature.auth.net.LoginOutcome
+import br.malhaviva.feature.auth.net.NewAccount
 import br.malhaviva.feature.auth.net.Tokens
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -78,16 +79,14 @@ class AuthSession(
         backupCode: String? = null,
     ): ApiResult<Tokens> = api.loginMfa(mfaToken, code, backupCode).also { if (it is ApiResult.Ok) store(it.value) }
 
-    /** Cadastro; com telefone ou e-mail exige CAPTCHA, e sem provedor nada e enviado. */
-    suspend fun signup(
-        handle: String,
-        password: String,
-        phone: String? = null,
-        email: String? = null,
-    ): ApiResult<Unit> {
-        val hasContact = phone != null || email != null
-        val token = if (hasContact) captcha.token() ?: return ApiResult.Fail(AuthError.CaptchaUnavailable) else null
-        return api.createAccount(handle, password, phone, email, token)
+    /**
+     * Cadastro; com telefone, e-mail ou contato do responsavel exige CAPTCHA, e sem provedor nada e
+     * enviado. True no resultado = conta aguardando a autorizacao do responsavel.
+     */
+    suspend fun signup(account: NewAccount): ApiResult<Boolean> {
+        val sends = account.phone != null || account.email != null || account.guardian != null
+        val token = if (sends) captcha.token() ?: return ApiResult.Fail(AuthError.CaptchaUnavailable) else null
+        return api.createAccount(account, token)
     }
 
     suspend fun logout() {

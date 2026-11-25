@@ -5,6 +5,8 @@ import br.malhaviva.core.ui.MviViewModel
 import br.malhaviva.feature.auth.net.AccountApi
 import br.malhaviva.feature.auth.net.ApiResult
 import br.malhaviva.feature.auth.net.AuthError
+import br.malhaviva.feature.auth.net.Guardian
+import br.malhaviva.feature.auth.net.NewAccount
 import kotlinx.coroutines.launch
 
 /** [deviceLabel] e o nome amigavel do aparelho enviado no login (o servidor sanitiza). */
@@ -73,9 +75,24 @@ class AuthViewModel(
     private suspend fun signup(form: AuthState) {
         val email = form.email.trim().ifEmpty { null }
         val phone = if (isPhoneBlank(form.phone)) null else normalizePhone(form.phone)
-        val result = session.signup(normalizeHandle(form.handle), form.password, phone = phone, email = email)
+        val birth = form.birth ?: return onIntent(AuthIntent.Failed(AuthError.Rejected(STATUS_BAD_REQUEST, null)))
+        val guardian =
+            if (!form.needsGuardian) {
+                null
+            } else if (form.guardianChannel == ContactChannel.Phone) {
+                Guardian(form.guardianChannel.wire, normalizePhone(form.guardian))
+            } else {
+                Guardian(form.guardianChannel.wire, form.guardian.trim())
+            }
+        val result =
+            session.signup(
+                NewAccount(normalizeHandle(form.handle), form.password, birth.toString(), guardian, phone, email),
+            )
         when (result) {
-            is ApiResult.Ok -> onIntent(AuthIntent.SignedUp(withContact = phone != null || email != null))
+            is ApiResult.Ok ->
+                onIntent(
+                    AuthIntent.SignedUp(withContact = phone != null || email != null, parentalPending = result.value),
+                )
             is ApiResult.Fail -> onIntent(AuthIntent.Failed(result.error))
         }
     }
@@ -99,6 +116,7 @@ class AuthViewModel(
         onIntent(if (error == AuthError.Unauthorized) AuthIntent.SessionLost else AuthIntent.Failed(error))
 
     private companion object {
+        const val STATUS_BAD_REQUEST = 400
         val SUBMITS = setOf(AuthIntent.SubmitLogin, AuthIntent.SubmitMfa, AuthIntent.SubmitSignup)
     }
 }

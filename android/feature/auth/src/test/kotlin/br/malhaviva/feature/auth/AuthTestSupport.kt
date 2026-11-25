@@ -6,6 +6,7 @@ import br.malhaviva.core.data.net.HttpTransport
 import br.malhaviva.core.data.secure.InMemorySecretStore
 import br.malhaviva.feature.auth.net.AccountApi
 import br.malhaviva.feature.auth.net.AuthApi
+import br.malhaviva.feature.auth.net.PrivacyApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -60,6 +61,8 @@ fun problem(
 
 fun deviceJson(id: String) = """{"id":"$id","label":"A","created_at":"c","last_used_at":"u"}"""
 
+const val ADULT_BIRTH = "1990-01-01"
+
 const val ACCOUNT_JSON = """{"handle":"@ana","contacts_verified":{"phone":false,"email":false}}"""
 
 const val ENROLL_JSON =
@@ -78,9 +81,11 @@ class TestEnv(
     val transport = FakeTransport()
     val secrets = InMemorySecretStore()
     val api = AuthApi("http://host:8080/", transport)
+    val privacy = PrivacyApi("http://host:8080/", transport)
     val account = AccountApi("http://host:8080/", transport)
     val session = AuthSession(api, secrets, { captcha })
     val recovery = AccountRecovery(api, { captcha }, session)
+    val parental = ParentalConsent(api, { captcha })
 }
 
 /** Troca o Dispatchers.Main por um despachante imediato: o viewModelScope roda no proprio teste. */

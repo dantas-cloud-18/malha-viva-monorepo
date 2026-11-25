@@ -55,7 +55,56 @@ data class TotpEnrollment(
     val otpauthUri: String,
 )
 
+/** Dados do cadastro. `birthDate` e ISO (aaaa-mm-dd); `guardian` so para menor de 12 anos. */
+data class NewAccount(
+    val handle: String,
+    val password: String,
+    val birthDate: String,
+    val guardian: Guardian? = null,
+    val phone: String? = null,
+    val email: String? = null,
+)
+
+/** Contato do responsavel (menor de 12 anos): `channel` e `phone` ou `email`. */
+data class Guardian(
+    val channel: String,
+    val value: String,
+)
+
+/** Conta como o servidor a descreve; `ageBracket` e `under_12`, `teen_12_17` ou `adult` (ausente = null). */
+data class AccountInfo(
+    val handle: String,
+    val ageBracket: String?,
+)
+
+data class Consent(
+    val purpose: String,
+    val granted: Boolean,
+    val needsReconsent: Boolean,
+)
+
+data class ConsentList(
+    val policyVersion: String,
+    val consents: List<Consent>,
+)
+
+data class ConsentEvent(
+    val purpose: String,
+    val action: String,
+    val policyVersion: String,
+    val occurredAt: String,
+)
+
 sealed interface AuthError {
+    /** 403 `parental_consent_pending`: senha certa, mas o responsavel ainda nao autorizou a conta. */
+    data object ParentalConsentPending : AuthError
+
+    /** 403 `marketing_forbidden_for_minors`. */
+    data object MarketingForbiddenForMinors : AuthError
+
+    /** 409 `policy_version_mismatch`: o app mostrou um texto de politica que nao e o vigente. */
+    data object PolicyMismatch : AuthError
+
     /** 401: no login, handle ou senha errados; em rota autenticada, sessao invalida. */
     data object Unauthorized : AuthError
 

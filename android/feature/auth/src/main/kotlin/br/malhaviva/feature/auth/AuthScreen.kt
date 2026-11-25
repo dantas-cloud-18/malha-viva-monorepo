@@ -25,6 +25,8 @@ class AuthFlows(
     val recovery: RecoveryViewModel,
     val totp: TotpViewModel,
     val contacts: ContactsViewModel,
+    val parental: ParentalViewModel,
+    val privacy: PrivacyViewModel,
 )
 
 /** Entrada do fluxo de conta; a ligacao na navegacao do app fica para depois. */
@@ -60,6 +62,8 @@ fun AuthContent(
                 AuthScreen.Recovery -> RecoveryFlow(flows.recovery, state.handle, onIntent)
                 AuthScreen.Totp -> TotpFlow(flows.totp, enrollOnly = false, onMain = onIntent)
                 AuthScreen.Contacts -> ContactsFlow(flows.contacts, onIntent)
+                AuthScreen.Parental -> ParentalFlow(flows.parental, state.handle, onIntent)
+                AuthScreen.Privacy -> PrivacyFlow(flows.privacy, onIntent)
             }
             if (state.screen in MAIN_SCREENS) StatusLine(state.busy, state.message, state.retryAfterSeconds)
         }
@@ -145,4 +149,14 @@ private val MESSAGE_RES =
         AuthMessage.ContactConfirmed to R.string.auth_msg_contact_confirmed,
         AuthMessage.ContactChangePending to R.string.auth_msg_contact_change_pending,
         AuthMessage.ContactChangeCanceled to R.string.auth_msg_contact_change_canceled,
+        AuthMessage.ParentalPending to R.string.auth_msg_parental_pending,
+        AuthMessage.ParentalConfirmed to R.string.auth_msg_parental_confirmed,
+        AuthMessage.ParentalResent to R.string.auth_msg_parental_resent,
+        AuthMessage.AccountCreatedParental to R.string.auth_msg_account_created_parental,
+        AuthMessage.PolicyMismatch to R.string.auth_msg_policy_mismatch,
+        AuthMessage.MarketingForbidden to R.string.auth_msg_marketing_forbidden,
+        AuthMessage.ConsentSaved to R.string.auth_msg_consent_saved,
+        AuthMessage.HandleUpdated to R.string.auth_msg_handle_updated,
+        AuthMessage.AccountDeleted to R.string.auth_msg_account_deleted,
+        AuthMessage.ExportReady to R.string.auth_msg_export_ready,
     )

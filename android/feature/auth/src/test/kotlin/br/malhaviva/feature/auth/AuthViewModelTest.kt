@@ -35,6 +35,7 @@ class AuthViewModelTest {
     ) {
         act(AuthIntent.HandleChanged(handle))
         act(AuthIntent.PasswordChanged(password))
+        act(AuthIntent.BirthDateChanged("01/01/1990"))
     }
 
     @Test

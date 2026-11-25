@@ -3,8 +3,9 @@ package br.malhaviva.feature.auth
 import br.malhaviva.feature.auth.net.AuthError
 import br.malhaviva.feature.auth.net.Device
 import br.malhaviva.feature.auth.net.LoginOutcome
+import java.time.LocalDate
 
-enum class AuthScreen { Login, Mfa, Signup, EnrollmentOnly, Devices, Recovery, Totp, Contacts }
+enum class AuthScreen { Login, Mfa, Signup, EnrollmentOnly, Devices, Recovery, Totp, Contacts, Parental, Privacy }
 
 /** Mensagens da tela; o texto em pt-BR vem de recursos. */
 enum class AuthMessage {
@@ -36,6 +37,16 @@ enum class AuthMessage {
     ContactConfirmed,
     ContactChangePending,
     ContactChangeCanceled,
+    ParentalPending,
+    ParentalConfirmed,
+    ParentalResent,
+    AccountCreatedParental,
+    PolicyMismatch,
+    MarketingForbidden,
+    ConsentSaved,
+    HandleUpdated,
+    AccountDeleted,
+    ExportReady,
 }
 
 private val NOTICES =
@@ -51,6 +62,13 @@ private val NOTICES =
         AuthMessage.ContactConfirmed,
         AuthMessage.ContactChangePending,
         AuthMessage.ContactChangeCanceled,
+        AuthMessage.ParentalConfirmed,
+        AuthMessage.ParentalResent,
+        AuthMessage.AccountCreatedParental,
+        AuthMessage.ConsentSaved,
+        AuthMessage.HandleUpdated,
+        AuthMessage.AccountDeleted,
+        AuthMessage.ExportReady,
     )
 
 /** Avisos de sucesso nao usam a cor de erro. */
@@ -62,6 +80,11 @@ data class AuthState(
     val password: String = "",
     val email: String = "",
     val phone: String = DEFAULT_PHONE,
+    /** Nascimento digitado como dd/mm/aaaa; so a faixa etaria sai do aparelho para o servidor. */
+    val birthDate: String = "",
+    val guardianChannel: ContactChannel = ContactChannel.Phone,
+    val guardian: String = DEFAULT_PHONE,
+    val today: LocalDate = LocalDate.now(),
     val mfaToken: String? = null,
     val mfaCode: String = "",
     val useBackupCode: Boolean = false,
@@ -72,8 +95,23 @@ data class AuthState(
     val devices: List<Device> = emptyList(),
 ) {
     val canSubmitLogin get() = !busy && isHandleValid(handle) && isPasswordValid(password)
+    val birth: LocalDate? get() = parseBirthDate(birthDate, today)
+
+    /** Menor de 12 anos: exige o contato do responsavel. Data invalida conta como "sem informacao". */
+    val needsGuardian: Boolean get() = birth?.let { ageOn(it, today) < GUARDIAN_AGE } == true
+    val guardianValid: Boolean
+        get() =
+            when (guardianChannel) {
+                ContactChannel.Phone -> isPhoneValid(guardian) && !isPhoneBlank(guardian)
+                ContactChannel.Email -> isEmailValid(guardian)
+            }
     val canSubmitSignup
-        get() = canSubmitLogin && (email.isBlank() || '@' in email) && (isPhoneBlank(phone) || isPhoneValid(phone))
+        get() =
+            canSubmitLogin &&
+                birth != null &&
+                (!needsGuardian || guardianValid) &&
+                (email.isBlank() || '@' in email) &&
+                (isPhoneBlank(phone) || isPhoneValid(phone))
     val canSubmitMfa
         get() = !busy && mfaCode.isNotBlank() && (useBackupCode || mfaCode.length == TOTP_LENGTH)
 }
@@ -95,6 +133,18 @@ sealed interface AuthIntent {
         val value: String,
     ) : AuthIntent
 
+    data class BirthDateChanged(
+        val value: String,
+    ) : AuthIntent
+
+    data class GuardianChannelChanged(
+        val value: ContactChannel,
+    ) : AuthIntent
+
+    data class GuardianChanged(
+        val value: String,
+    ) : AuthIntent
+
     data class MfaCodeChanged(
         val value: String,
     ) : AuthIntent
@@ -112,6 +162,10 @@ sealed interface AuthIntent {
     data object GoContacts : AuthIntent
 
     data object GoDevices : AuthIntent
+
+    data object GoParental : AuthIntent
+
+    data object GoPrivacy : AuthIntent
 
     // Acoes que disparam rede: o reducer so liga `busy`, o ViewModel executa.
     data object SubmitLogin : AuthIntent
@@ -137,7 +191,14 @@ sealed interface AuthIntent {
 
     data class SignedUp(
         val withContact: Boolean,
+        val parentalPending: Boolean = false,
     ) : AuthIntent
+
+    /** Responsavel confirmou o codigo: a conta ja pode entrar. */
+    data object ParentalDone : AuthIntent
+
+    /** Conta excluida no servidor: volta ao login limpo, com aviso. */
+    data object AccountDeleted : AuthIntent
 
     /** Recuperacao concluida: todas as sessoes foram encerradas no servidor. */
     data object RecoveryDone : AuthIntent
@@ -182,6 +243,9 @@ fun AuthError.toMessage(): AuthMessage =
 private fun AuthError.toCodeMessage(): AuthMessage =
     when (this) {
         AuthError.InvalidCode -> AuthMessage.InvalidCode
+        AuthError.ParentalConsentPending -> AuthMessage.ParentalPending
+        AuthError.PolicyMismatch -> AuthMessage.PolicyMismatch
+        AuthError.MarketingForbiddenForMinors -> AuthMessage.MarketingForbidden
         AuthError.InvalidCredentials -> AuthMessage.InvalidCredentials
         AuthError.AdminMfaMandatory -> AuthMessage.AdminMfaMandatory
         AuthError.EnrollmentCodeRequired -> AuthMessage.EnrollmentCodeRequired
@@ -213,6 +277,14 @@ private fun reduceEdit(
         is AuthIntent.PasswordChanged -> state.copy(password = intent.value, message = null)
         is AuthIntent.EmailChanged -> state.copy(email = intent.value, message = null)
         is AuthIntent.PhoneChanged -> state.copy(phone = intent.value, message = null)
+        is AuthIntent.BirthDateChanged -> state.copy(birthDate = intent.value.trim(), message = null)
+        is AuthIntent.GuardianChannelChanged ->
+            state.copy(
+                guardianChannel = intent.value,
+                guardian = if (intent.value == ContactChannel.Phone) DEFAULT_PHONE else "",
+                message = null,
+            )
+        is AuthIntent.GuardianChanged -> state.copy(guardian = intent.value.trim(), message = null)
         is AuthIntent.MfaCodeChanged -> state.copy(mfaCode = intent.value.trim(), message = null)
         AuthIntent.ToggleBackupCode -> state.copy(useBackupCode = !state.useBackupCode, mfaCode = "", message = null)
         else -> reduceNav(state, intent)
@@ -229,6 +301,10 @@ private fun reduceNav(
         AuthIntent.GoTotp -> state.copy(screen = AuthScreen.Totp, busy = false, message = null)
         AuthIntent.GoContacts -> state.copy(screen = AuthScreen.Contacts, busy = false, message = null)
         AuthIntent.GoDevices -> state.copy(screen = AuthScreen.Devices, busy = false, message = null)
+        AuthIntent.GoPrivacy -> state.copy(screen = AuthScreen.Privacy, busy = false, message = null)
+        AuthIntent.GoParental -> AuthState(screen = AuthScreen.Parental, handle = state.handle)
+        AuthIntent.ParentalDone -> AuthState(handle = state.handle, message = AuthMessage.ParentalConfirmed)
+        AuthIntent.AccountDeleted -> AuthState(message = AuthMessage.AccountDeleted)
         AuthIntent.RecoveryDone -> AuthState(handle = state.handle, message = AuthMessage.RecoveryDone)
         AuthIntent.EnrollmentFinished -> AuthState(handle = state.handle, message = AuthMessage.EnrollmentDone)
         else -> reduceResult(state, intent)
@@ -246,17 +322,18 @@ private fun reduceResult(
         is AuthIntent.SignedUp ->
             AuthState(
                 handle = state.handle,
-                message = if (intent.withContact) AuthMessage.AccountCreatedVerify else AuthMessage.AccountCreated,
+                message = signedUpMessage(intent),
             )
         is AuthIntent.DevicesLoaded -> state.copy(busy = false, devices = intent.devices)
         is AuthIntent.DeviceRevoked ->
             state.copy(busy = false, devices = state.devices.filterNot { it.id == intent.id })
         is AuthIntent.Failed ->
-            state.copy(
-                busy = false,
-                message = intent.error.toMessage(),
-                retryAfterSeconds = (intent.error as? AuthError.RateLimited)?.retryAfterSeconds,
-            )
+            if (intent.error == AuthError.ParentalConsentPending) {
+                // Senha certa, conta ainda sem autorizacao do responsavel: leva direto a tela do codigo.
+                AuthState(screen = AuthScreen.Parental, handle = state.handle, message = AuthMessage.ParentalPending)
+            } else {
+                reduceFailure(state, intent.error)
+            }
         AuthIntent.SessionLost,
         AuthIntent.Logout,
         ->
@@ -272,6 +349,22 @@ private fun reduceResult(
                     },
             )
         else -> state
+    }
+
+private fun reduceFailure(
+    state: AuthState,
+    error: AuthError,
+) = state.copy(
+    busy = false,
+    message = error.toMessage(),
+    retryAfterSeconds = (error as? AuthError.RateLimited)?.retryAfterSeconds,
+)
+
+private fun signedUpMessage(intent: AuthIntent.SignedUp) =
+    when {
+        intent.parentalPending -> AuthMessage.AccountCreatedParental
+        intent.withContact -> AuthMessage.AccountCreatedVerify
+        else -> AuthMessage.AccountCreated
     }
 
 private fun reduceLogin(

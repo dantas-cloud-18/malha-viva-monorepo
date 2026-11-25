@@ -17,6 +17,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import br.malhaviva.core.designsystem.CheckInButton
+import br.malhaviva.core.designsystem.MalhaVivaSpacing
 import br.malhaviva.core.designsystem.MalhaVivaTheme
 
 @Composable
@@ -60,6 +61,7 @@ internal fun LoginForm(
     }, enabled = state.canSubmitLogin)
     TextButton({ onIntent(AuthIntent.GoSignup) }) { Text(stringResource(R.string.auth_go_signup)) }
     TextButton({ onIntent(AuthIntent.GoRecovery) }) { Text(stringResource(R.string.auth_go_recovery)) }
+    TextButton({ onIntent(AuthIntent.GoParental) }) { Text(stringResource(R.string.auth_go_parental)) }
 }
 
 @Composable
@@ -74,6 +76,14 @@ internal fun SignupForm(
         onIntent(AuthIntent.PasswordChanged(it))
     }, secret = true)
     Hint(stringResource(R.string.auth_password_hint))
+    Field(
+        stringResource(R.string.auth_birth_label),
+        state.birthDate,
+        { onIntent(AuthIntent.BirthDateChanged(it)) },
+        keyboardType = KeyboardType.Number,
+    )
+    Hint(stringResource(R.string.auth_birth_hint))
+    if (state.needsGuardian) GuardianFields(state, onIntent)
     Field(
         stringResource(R.string.auth_email_label),
         state.email,
@@ -91,6 +101,31 @@ internal fun SignupForm(
         onIntent(AuthIntent.SubmitSignup)
     }, enabled = state.canSubmitSignup)
     TextButton({ onIntent(AuthIntent.GoLogin) }) { Text(stringResource(R.string.auth_go_login)) }
+}
+
+/** Menor de 12 anos: pede o contato do responsavel, que precisa autorizar a conta. */
+@Composable
+private fun GuardianFields(
+    state: AuthState,
+    onIntent: (AuthIntent) -> Unit,
+) {
+    Title(stringResource(R.string.auth_guardian_title))
+    Hint(stringResource(R.string.auth_guardian_info))
+    val phone = state.guardianChannel == ContactChannel.Phone
+    Row(horizontalArrangement = Arrangement.spacedBy(MalhaVivaSpacing.s)) {
+        OutlinedButton({ onIntent(AuthIntent.GuardianChannelChanged(ContactChannel.Phone)) }, enabled = !phone) {
+            Text(stringResource(R.string.auth_contacts_phone))
+        }
+        OutlinedButton({ onIntent(AuthIntent.GuardianChannelChanged(ContactChannel.Email)) }, enabled = phone) {
+            Text(stringResource(R.string.auth_contacts_email))
+        }
+    }
+    Field(
+        stringResource(if (phone) R.string.auth_guardian_phone_label else R.string.auth_guardian_email_label),
+        state.guardian,
+        { onIntent(AuthIntent.GuardianChanged(it)) },
+        keyboardType = if (phone) KeyboardType.Phone else KeyboardType.Email,
+    )
 }
 
 @Composable
@@ -134,6 +169,7 @@ internal fun DevicesList(
         }
     }
     TextButton({ onIntent(AuthIntent.GoContacts) }) { Text(stringResource(R.string.auth_go_contacts)) }
+    TextButton({ onIntent(AuthIntent.GoPrivacy) }) { Text(stringResource(R.string.auth_go_privacy)) }
     TextButton({ onIntent(AuthIntent.GoTotp) }) { Text(stringResource(R.string.auth_go_totp)) }
     TextButton({ onIntent(AuthIntent.Logout) }) { Text(stringResource(R.string.auth_logout)) }
 }

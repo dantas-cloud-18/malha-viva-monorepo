@@ -18,6 +18,7 @@ class SignupPhoneTest {
         act(AuthIntent.GoSignup)
         act(AuthIntent.HandleChanged("ana"))
         act(AuthIntent.PasswordChanged("senha-longa-1"))
+        act(AuthIntent.BirthDateChanged("01/01/1990"))
         act(AuthIntent.PhoneChanged(phone))
         act(AuthIntent.SubmitSignup)
     }
