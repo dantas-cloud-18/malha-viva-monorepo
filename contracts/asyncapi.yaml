@@ -68,7 +68,7 @@ components:
               type: string
               description: "trains:{corridor}:{direction} ou eta:{corridor}:{direction}:{station_id}"
     TrainState:
-      summary: Enviado só com mudança relevante (estação, pausa, desvio de posição) e só para trem com pelo menos K viagens anônimas distintas (k-anonimato; K padrão 3, mínimo 2).
+      summary: Enviado só com mudança relevante (estação, pausa, desvio de posição) e só para trem com pelo menos K viagens anônimas distintas (limiar de publicação; K padrão 1, mínimo 1).
       payload:
         type: object
         required: [event, train_id, corridor, direction, ts, km, speed_mps, state, confidence]
@@ -82,7 +82,7 @@ components:
           speed_mps: { type: number }
           state: { type: string, enum: [MOVING, AT_STATION, PAUSED_ON_TRACK, SCHEDULED] }
           last_station_id: { type: string }
-          confidence: { type: string, enum: [low, medium, high], description: "Faixa grossa: K a 4 = low, 5 a 9 = medium, 10 ou mais = high. Sem contagem exata." }
+          confidence: { type: string, enum: [low, medium, high], description: "Faixa grossa: 1 a 2 = low, 3 a 6 = medium, 7 ou mais = high. Sem contagem exata." }
     Eta:
       summary: Publicado quando o ETA muda 15 s ou mais.
       payload:

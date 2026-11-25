@@ -644,7 +644,11 @@ paths:
         - telemetryToken: []
       description: >
         Lote de amostras de um aparelho. O aparelho já descartou pontos fora do corredor e cortou
-        início e fim da viagem. Assinatura: HMAC-SHA256 sobre
+        início e fim da viagem. Cadência: o app envia um lote a cada 15 s durante a viagem (cada lote traz as
+        amostras novas, em geral 2 ou 3); os últimos 300 m da viagem ficam retidos até o fim, por privacidade.
+        O servidor infere o sentido pelo avanço (50 m ou mais) entre a primeira e a última amostra do lote; com
+        menos avanço usa `bearing_deg` da última amostra (só se `speed_mps` for 1 m/s ou mais) e, sem rumo,
+        mantém o último sentido da época. Assinatura: HMAC-SHA256 sobre
         "{X-Timestamp}\n{X-Nonce}\n{sha256(corpo)}" com a chave do token. sha256(corpo) é o hash dos bytes
         do corpo em hexadecimal minúsculo; a assinatura é o HMAC em base64url sem padding ("=").
         Timestamp com tolerância de 60 s; nonce de uso único. Assinatura inválida não consome o nonce.
@@ -717,9 +721,11 @@ paths:
       description: >
         Snapshot dos trens estimados em um sentido. Fallback de polling para o stream SSE.
         Nenhum campo identifica passageiro, dispositivo ou conta; os ids dos trens sao efemeros.
-        k-anonimato: um trem so aparece quando ha pelo menos K viagens anonimas distintas (ids efemeros de viagem,
-        nao pontos) dentro da janela de 30 s. K padrao 3, configuravel no servidor (minimo 2). Abaixo disso a lista
-        vem sem o trem.
+        Limiar de publicacao: um trem so aparece quando ha pelo menos K viagens anonimas distintas (ids efemeros de
+        viagem, nao pontos) dentro da janela de 60 s. K padrao 1 (um trem pode ser a posicao anonima de uma unica
+        pessoa; ver RIPD R1/R2), configuravel no servidor (minimo 1). Abaixo de K a lista vem sem o trem.
+        Cada posicao e projetada para o instante da consulta (velocidade x idade). Cada trem traz situacao,
+        estacao de referencia e ETA por estacao a frente.
       parameters:
         - $ref: "#/components/parameters/Corridor"
         - in: query
@@ -728,7 +734,7 @@ paths:
           schema: { $ref: "#/components/schemas/Direction" }
       responses:
         "200":
-          description: Trens atuais (posicoes com mais de 30 s ja foram descartadas).
+          description: Trens atuais (posicoes com mais de 60 s ja foram descartadas).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TrainsSnapshot" }
@@ -742,8 +748,8 @@ paths:
       summary: Trens do corredor (SSE)
       security: []
       description: >
-        Server-Sent Events. Cada evento `train` traz o JSON de um TrainState atualizado. Mesmo limiar k-anonimato do
-        polling: so sao enviados trens com pelo menos K viagens anonimas distintas na janela de 30 s (padrao 3).
+        Server-Sent Events. Cada evento `train` traz o JSON de um TrainState atualizado. Mesmo limiar de publicacao do
+        polling: so sao enviados trens com pelo menos K viagens anonimas distintas na janela de 60 s (padrao 1).
         Comentario de heartbeat a cada 15 s. Há teto de conexões abertas, global e por IP: acima dele a
         conexão não abre (503 com `Retry-After`).
       parameters:
@@ -1292,7 +1298,7 @@ components:
         lon: { type: number, minimum: -180, maximum: 180 }
         accuracy_m: { type: number, minimum: 0 }
         speed_mps: { type: number, minimum: 0 }
-        bearing_deg: { type: number, minimum: 0, exclusiveMaximum: 360 }
+        bearing_deg: { type: number, minimum: 0, exclusiveMaximum: 360, description: "Rumo do GPS (0 = norte, horário). Opcional; só vale em movimento." }
         motion_state: { type: string, enum: [MOVING, STATIONARY, UNKNOWN] }
         mock_location: { type: boolean, description: Sinal do sistema; true descarta a amostra. }
     BatchResult:
@@ -1303,22 +1309,46 @@ components:
         rejected:
           type: object
           additionalProperties: { type: integer }
-          description: "Contagem por motivo: ACCURACY, OFF_CORRIDOR, IMPLAUSIBLE_SPEED, MOCK, DUPLICATE, STALE."
+          description: "Contagem por motivo: ACCURACY, OFF_CORRIDOR (mais de 150 m do traçado), IMPLAUSIBLE_SPEED, MOCK, DUPLICATE, STALE."
 
     TrainState:
       type: object
-      required: [id, along_m, speed_mps, confidence, updated_at_ms]
+      required: [id, along_m, speed_mps, confidence, updated_at_ms, situation, station_id, etas]
       properties:
         id: { type: string, description: "ID efemero do cluster; nao deriva de nenhum id de passageiro." }
-        along_m: { type: number, description: "Posicao ao longo da via, em metros." }
+        along_m: { type: number, description: "Posicao ao longo da via, em metros, projetada para o instante da resposta." }
         speed_mps: { type: number, minimum: 0 }
         confidence:
           type: string
           enum: [low, medium, high]
           description: >
-            Faixa grossa pelo numero de viagens anonimas distintas: K a 4 = low, 5 a 9 = medium, 10 ou mais = high.
+            Faixa grossa pelo numero de viagens anonimas distintas: 1 a 2 = low, 3 a 6 = medium, 7 ou mais = high.
             O numero exato de contribuintes nunca e exposto.
-        updated_at_ms: { type: integer, format: int64 }
+        updated_at_ms: { type: integer, format: int64, description: "Instante da amostra mais nova do trem (nao da projecao)." }
+        situation:
+          type: string
+          enum: [moving, at_station, stopped_between_stations]
+          description: >
+            Situacao do trem; o texto em portugues e montado pelo cliente. at_station = parado (ate 1 m/s) a ate 100 m
+            de uma estacao. stopped_between_stations = ALERTA: parado fora de estacao ha 60 s ou mais.
+        station_id:
+          description: >
+            Estacao de referencia: a atual quando situation = at_station; nos demais casos, a proxima a frente no sentido.
+            Nulo se nao ha estacao a frente.
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        etas:
+          type: array
+          description: >
+            Estimativa de chegada (marcha constante, sem paradas) em cada estacao a frente no sentido, ate 99 min.
+            Vazio se o trem esta parado ou a menos de 1 m/s.
+          items:
+            type: object
+            required: [station_id, eta_s]
+            properties:
+              station_id: { type: string }
+              eta_s: { type: integer, minimum: 0, description: "Segundos desde o instante da resposta." }
     TrainsSnapshot:
       type: object
       required: [corridor, direction, trains]
