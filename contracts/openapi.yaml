@@ -99,12 +99,22 @@ paths:
                 password: { type: string, minLength: 8, maxLength: 128 }
                 device_label: { $ref: "#/components/schemas/DeviceLabel" }
                 captcha_token: { type: string, description: Exigido após 5 falhas por handle ou IP. }
+      description: >
+        Senha correta nem sempre devolve tokens. Conta com TOTP ativo (opcional para `user`, obrigatório para `admin`)
+        recebe `MfaChallenge` e conclui em `/auth/login/mfa`. Admin ainda sem TOTP recebe `MfaEnrollmentRequired`:
+        um access token restrito (`scope: mfa_enroll_only`, sem refresh) que só serve para `/me/mfa/totp` e
+        `/me/mfa/totp/confirm`; todas as outras rotas protegidas o recusam com 401. Depois de confirmar, entrar de novo.
+        A recuperação de senha não remove o TOTP: depois do reset, o login continua pedindo o código.
       responses:
         "200":
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/TokenPair" }
-          description: Tokens emitidos.
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/TokenPair"
+                  - $ref: "#/components/schemas/MfaChallenge"
+                  - $ref: "#/components/schemas/MfaEnrollmentRequired"
+          description: Tokens emitidos, segundo fator exigido ou enrolamento de TOTP exigido (admin).
         "401":
           description: Mesmo corpo para handle inexistente e senha errada.
           content:
@@ -116,6 +126,131 @@ paths:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/login/mfa:
+    post:
+      tags: [auth]
+      operationId: loginMfa
+      summary: Concluir o login com o código TOTP
+      security: []
+      description: >
+        `mfa_token` vale 5 min, é de uso único e fica só como SHA-256 em memória. Até 5 códigos errados por token;
+        cada erro conta no atraso progressivo do login (handle e IP). O mesmo passo de 30 s nunca é aceito duas vezes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mfa_token, code]
+              properties:
+                mfa_token: { type: string }
+                code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+          description: Tokens emitidos; o access token traz `amr` com `otp`.
+        "401":
+          description: Código errado ou reusado, ou `mfa_token` vencido, usado ou desconhecido (`invalid_mfa`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /me/mfa/totp:
+    post:
+      tags: [auth]
+      operationId: startTotpEnrollment
+      summary: Iniciar o enrolamento de TOTP
+      description: >
+        Gera um segredo novo (cifrado em repouso) e o devolve uma única vez. Aceita o token restrito
+        `mfa_enroll_only`. O 2FA só liga após `/me/mfa/totp/confirm`.
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Segredo gerado; ainda inativo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TotpEnrollment" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /me/mfa/totp/confirm:
+    post:
+      tags: [auth]
+      operationId: confirmTotpEnrollment
+      summary: Confirmar o TOTP com um código válido
+      description: Liga o 2FA. Aceita o token restrito `mfa_enroll_only`; depois é preciso entrar de novo.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "204": { description: 2FA ativo. }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /me/mfa/totp/disable:
+    post:
+      tags: [auth]
+      operationId: disableTotp
+      summary: Desligar o TOTP
+      description: Exige senha atual e código TOTP atual. Conta `admin` não pode desligar (403 `admin_mfa_mandatory`).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password, code]
+              properties:
+                password: { type: string }
+                code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "204": { description: 2FA desligado; segredo apagado. }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403":
+          description: Senha ou código errado (`invalid_credentials`) ou conta admin (`admin_mfa_mandatory`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /admin/ping:
+    get:
+      tags: [auth]
+      operationId: adminPing
+      summary: Verificação de acesso admin
+      description: Exige papel `admin` e access token com `amr` contendo `otp`. Senão 403 `admin_mfa_required`.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Acesso admin confirmado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [ok] }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
 
   /auth/refresh:
     post:
@@ -633,6 +768,30 @@ components:
         access_token: { type: string }
         refresh_token: { type: string }
         expires_in: { type: integer, description: Segundos. }
+      description: >
+        Claims do access JWT: `sub` (id da conta), `iat`, `exp`, `amr` (`["pwd"]` ou `["pwd","otp"]`) e, só no token
+        restrito, `scope: mfa_enroll_only`. Sem PII. O refresh preserva o `amr` da sessão.
+    MfaChallenge:
+      type: object
+      required: [mfa_required, mfa_token, expires_in]
+      properties:
+        mfa_required: { type: boolean, enum: [true] }
+        mfa_token: { type: string, description: Opaco, uso único. }
+        expires_in: { type: integer, description: Segundos (300). }
+    MfaEnrollmentRequired:
+      type: object
+      required: [mfa_enrollment_required, access_token, expires_in, scope]
+      properties:
+        mfa_enrollment_required: { type: boolean, enum: [true] }
+        access_token: { type: string, description: Restrito às rotas de enrolamento de TOTP. }
+        expires_in: { type: integer, description: Segundos. }
+        scope: { type: string, enum: [mfa_enroll_only] }
+    TotpEnrollment:
+      type: object
+      required: [secret, otpauth_uri]
+      properties:
+        secret: { type: string, description: Base32. Devolvido só nesta resposta. }
+        otpauth_uri: { type: string }
 
     TelemetryToken:
       type: object

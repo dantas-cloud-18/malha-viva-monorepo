@@ -1,6 +1,9 @@
 package br.malhaviva.auth
 
+import br.malhaviva.auth.recovery.JdbcTotpRepository
 import br.malhaviva.auth.recovery.RecoveryConfig
+import br.malhaviva.auth.recovery.TotpService
+import br.malhaviva.auth.recovery.otpKeyFromEnv
 import org.slf4j.LoggerFactory
 import javax.sql.DataSource
 
@@ -22,7 +25,9 @@ object AuthConfig {
         val sessions = SessionService(JdbcSessionRepository(dataSource), access)
         val accounts = JdbcAccountRepository(dataSource)
         val policy = PasswordPolicy(HttpPwnedPasswordsChecker())
-        val auth = AuthService(accounts, sessions, policy, hasher, LoginGuard(), NoopCaptchaVerifier)
+        val totp = TotpService(JdbcTotpRepository(dataSource), otpKeyFromEnv(env))
+        val mfa = MfaService(accounts, totp, hasher, access)
+        val auth = AuthService(accounts, sessions, policy, hasher, LoginGuard(), NoopCaptchaVerifier, mfa)
         val recovery = RecoveryConfig.build(dataSource, env, accounts, sessions, policy, hasher, NoopCaptchaVerifier)
         return AuthComponents(auth, sessions, access, recovery = recovery)
     }

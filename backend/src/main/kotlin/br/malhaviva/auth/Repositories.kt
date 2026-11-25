@@ -3,10 +3,14 @@ package br.malhaviva.auth
 import java.time.Instant
 import java.util.UUID
 
+const val ROLE_USER = "user"
+const val ROLE_ADMIN = "admin"
+
 data class AccountRecord(
     val id: UUID,
     val handle: String,
     val passwordHash: String,
+    val role: String = ROLE_USER,
 )
 
 interface AccountRepository {
@@ -43,6 +47,8 @@ data class RefreshRecord(
     val expiresAt: Instant,
     val replacedAt: Instant? = null,
     val revokedAt: Instant? = null,
+    /** O login da familia passou pelo TOTP; herdado na rotacao. */
+    val mfa: Boolean = false,
 )
 
 interface SessionRepository {

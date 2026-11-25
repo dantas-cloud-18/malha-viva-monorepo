@@ -8,6 +8,10 @@ import javax.sql.DataSource
 
 private const val INSERT_ACCOUNT =
     "INSERT INTO accounts (handle, password_hash) VALUES (?, ?) ON CONFLICT DO NOTHING RETURNING account_id"
+private const val ACCOUNT_COLUMNS = "account_id, handle, password_hash, role"
+
+private fun ResultSet.toAccount() =
+    AccountRecord(uuid("account_id"), getString("handle"), getString("password_hash"), getString("role"))
 
 class JdbcAccountRepository(
     private val dataSource: DataSource,
@@ -23,18 +27,15 @@ class JdbcAccountRepository(
     override fun findByHandle(handle: String): AccountRecord? =
         dataSource
             .read {
-                it.queryList(
-                    "SELECT account_id, handle, password_hash FROM accounts WHERE lower(handle) = lower(?)",
-                    handle,
-                ) { rs -> AccountRecord(rs.uuid("account_id"), rs.getString("handle"), rs.getString("password_hash")) }
+                it.queryList("SELECT $ACCOUNT_COLUMNS FROM accounts WHERE lower(handle) = lower(?)", handle) { rs ->
+                    rs.toAccount()
+                }
             }.firstOrNull()
 
     override fun findById(id: UUID): AccountRecord? =
         dataSource
             .read {
-                it.queryList("SELECT account_id, handle, password_hash FROM accounts WHERE account_id = ?", id) { rs ->
-                    AccountRecord(rs.uuid("account_id"), rs.getString("handle"), rs.getString("password_hash"))
-                }
+                it.queryList("SELECT $ACCOUNT_COLUMNS FROM accounts WHERE account_id = ?", id) { rs -> rs.toAccount() }
             }.firstOrNull()
 
     override fun updatePasswordHash(
@@ -49,12 +50,14 @@ class JdbcAccountRepository(
 
 private fun Connection.insertToken(t: RefreshRecord) =
     update(
-        "INSERT INTO refresh_tokens (token_hash, account_id, family_id, issued_at, expires_at) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO refresh_tokens (token_hash, account_id, family_id, issued_at, expires_at, mfa) " +
+            "VALUES (?, ?, ?, ?, ?, ?)",
         t.tokenHash,
         t.accountId,
         t.familyId,
         t.issuedAt,
         t.expiresAt,
+        t.mfa,
     )
 
 private fun Connection.revokeFamilyRows(
@@ -74,6 +77,7 @@ private fun ResultSet.toRefresh() =
         instant("expires_at"),
         instantOrNull("replaced_at"),
         instantOrNull("revoked_at"),
+        getBoolean("mfa"),
     )
 
 private fun ResultSet.toDevice(accountId: UUID) =
@@ -103,7 +107,7 @@ class JdbcSessionRepository(
         dataSource
             .read {
                 it.queryList(
-                    "SELECT token_hash, account_id, family_id, issued_at, expires_at, replaced_at, revoked_at " +
+                    "SELECT token_hash, account_id, family_id, issued_at, expires_at, replaced_at, revoked_at, mfa " +
                         "FROM refresh_tokens WHERE token_hash = ?",
                     tokenHash,
                 ) { rs -> rs.toRefresh() }

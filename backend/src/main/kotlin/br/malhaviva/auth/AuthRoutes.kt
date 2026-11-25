@@ -18,7 +18,6 @@ import java.util.UUID
 private const val MAX_HANDLE_LENGTH = 64
 private const val MAX_TOKEN_LENGTH = 512
 private const val RETRY_AFTER_LIMIT_S = "60"
-private const val BEARER = "Bearer "
 
 @Serializable
 private class CreateAccountDto(
@@ -86,20 +85,11 @@ internal suspend inline fun <reified T : Any> RoutingCall.body(): T? = runCatchi
 
 internal fun RoutingCall.ip(): String = request.local.remoteAddress
 
-/** Extrai e valida o access token. Sem token valido responde 401 e devolve null. */
+/** Token completo valido (nunca o restrito `mfa_enroll_only`); senao 401 e null. */
 suspend fun RoutingCall.accountIdOrUnauthorized(
     access: AccessTokenService,
     clock: () -> Long = System::currentTimeMillis,
-): UUID? {
-    val header = request.headers[HttpHeaders.Authorization].orEmpty()
-    val token = if (header.startsWith(BEARER, ignoreCase = true)) header.substring(BEARER.length).trim() else ""
-    val id = if (token.isEmpty() || token.length > MAX_TOKEN_LENGTH) null else access.verify(token, clock())
-    if (id == null) {
-        response.header(HttpHeaders.WWWAuthenticate, "Bearer")
-        problem(HttpStatusCode.Unauthorized, "Unauthorized")
-    }
-    return id
-}
+): UUID? = principalOrUnauthorized(access, clock)?.accountId
 
 fun Route.authRoutes(c: AuthComponents) {
     post("/auth/accounts") {
@@ -136,6 +126,7 @@ fun Route.authRoutes(c: AuthComponents) {
         call.respond(HttpStatusCode.NoContent)
     }
     deviceRoutes(c)
+    mfaRoutes(c)
     c.recovery?.let { recoveryRoutes(c, it) }
 }
 
@@ -173,14 +164,7 @@ private suspend fun loginRoute(
         !c.limiters.ip.tryAcquire("ip:${call.ip()}", c.clock()) -> call.throttled()
         dto == null || !valid -> call.problem(HttpStatusCode.BadRequest, "Malformed request")
         !c.limiters.handle.tryAcquire("h:${dto.handle.lowercase()}", c.clock()) -> call.throttled()
-        else ->
-            when (val r = c.auth.login(call.ip(), dto.handle, dto.password, dto.deviceLabel, dto.captchaToken)) {
-                is LoginResult.Success -> call.respond(r.tokens)
-                LoginResult.InvalidCredentials -> call.problem(HttpStatusCode.Unauthorized, "Invalid credentials")
-                LoginResult.CaptchaRequired ->
-                    call.problem(HttpStatusCode.Forbidden, "Captcha required", "captcha_required")
-                is LoginResult.Throttled -> call.throttled(r.retryAfterSeconds.toString())
-            }
+        else -> respondLogin(call, c.auth.login(call.ip(), dto.handle, dto.password, dto.deviceLabel, dto.captchaToken))
     }
 }
 

@@ -1,5 +1,8 @@
 package br.malhaviva.auth
 
+import br.malhaviva.auth.recovery.InMemoryTotpRepository
+import br.malhaviva.auth.recovery.TEST_OTP_KEY
+import br.malhaviva.auth.recovery.TotpService
 import java.time.Instant
 import java.util.UUID
 
@@ -60,6 +63,15 @@ class InMemoryAccountRepository : AccountRepository {
         passwordHash: String,
     ) {
         rows[accountId] = rows.getValue(accountId).copy(passwordHash = passwordHash)
+    }
+
+    /** So nos testes: promover a admin e manual no banco em producao. */
+    @Synchronized
+    fun setRole(
+        accountId: UUID,
+        role: String,
+    ) {
+        rows[accountId] = rows.getValue(accountId).copy(role = role)
     }
 }
 
@@ -143,9 +155,12 @@ class TestAuth(
     val access = AccessTokenService(TEST_JWT_SECRET)
     val sessions = SessionService(sessionRepo, access, { now })
     val guard = LoginGuard { now }
+    val totpRepo = InMemoryTotpRepository()
+    val totp = TotpService(totpRepo, TEST_OTP_KEY, { now })
+    val mfa = MfaService(accounts, totp, hasher, access, { now })
     val components =
         AuthComponents(
-            AuthService(accounts, sessions, PasswordPolicy(FakePwned()), hasher, guard, captcha),
+            AuthService(accounts, sessions, PasswordPolicy(FakePwned()), hasher, guard, captcha, mfa),
             sessions,
             access,
             limiters,

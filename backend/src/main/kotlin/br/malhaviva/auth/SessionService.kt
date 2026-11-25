@@ -57,18 +57,20 @@ class SessionService(
     private fun newRefresh(): String =
         Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(REFRESH_BYTES).also(random::nextBytes))
 
+    /** [mfa] marca que o login passou pelo TOTP: o access traz `amr` com `otp`, tambem apos cada refresh. */
     fun startSession(
         accountId: UUID,
         deviceLabel: String?,
+        mfa: Boolean = false,
     ): TokenPair {
         val now = now()
         val deviceId = UUID.randomUUID()
         val raw = newRefresh()
         sessions.createDevice(
             DeviceRecord(deviceId, accountId, sanitizeDeviceLabel(deviceLabel), now, now),
-            RefreshRecord(sha256Hex(raw), accountId, deviceId, now, now.plus(REFRESH_TTL)),
+            RefreshRecord(sha256Hex(raw), accountId, deviceId, now, now.plus(REFRESH_TTL), mfa = mfa),
         )
-        return TokenPair(access.issue(accountId, clock()), raw)
+        return TokenPair(access.issue(accountId, clock(), amrFor(mfa)), raw)
     }
 
     /** Devolve novo par ou null (401) se o token e desconhecido, vencido, revogado ou reusado. */
@@ -89,9 +91,10 @@ class SessionService(
         now: Instant,
     ): TokenPair? {
         val raw = newRefresh()
-        val next = RefreshRecord(sha256Hex(raw), current.accountId, current.familyId, now, current.expiresAt)
+        val next =
+            current.copy(tokenHash = sha256Hex(raw), issuedAt = now, replacedAt = null, revokedAt = null)
         return if (sessions.rotate(hash, next, now)) {
-            TokenPair(access.issue(current.accountId, clock()), raw)
+            TokenPair(access.issue(current.accountId, clock(), amrFor(current.mfa)), raw)
         } else {
             reuseDetected(current)
         }

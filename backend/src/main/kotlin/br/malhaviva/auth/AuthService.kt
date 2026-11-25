@@ -30,9 +30,26 @@ sealed interface LoginResult {
     data class Throttled(
         val retryAfterSeconds: Long,
     ) : LoginResult
+
+    /** Senha certa, falta o TOTP: concluir em /auth/login/mfa. */
+    data class MfaRequired(
+        val mfaToken: String,
+    ) : LoginResult
+
+    /** Admin sem TOTP: so o access restrito de enrolamento. */
+    data class MfaEnrollmentRequired(
+        val accessToken: String,
+    ) : LoginResult
+
+    /** Codigo errado/reusado ou mfa_token vencido, usado ou desconhecido. */
+    data object InvalidMfa : LoginResult
 }
 
-/** Cadastro e login. A orquestracao do abuso fica em [LoginGuard]; as sessoes em [SessionService]. */
+/**
+ * Cadastro e login. A orquestracao do abuso fica em [LoginGuard]; as sessoes em [SessionService]; o 2FA em
+ * [MfaService]. Suppress: injecao de dependencias; agrupar so deslocaria os parametros do construtor.
+ */
+@Suppress("LongParameterList")
 class AuthService(
     private val accounts: AccountRepository,
     private val sessions: SessionService,
@@ -40,6 +57,7 @@ class AuthService(
     private val hasher: PasswordHasher,
     private val guard: LoginGuard,
     private val captcha: CaptchaVerifier,
+    val mfa: MfaService,
 ) {
     /** Hash descartavel: igualar o tempo quando o handle nao existe (sem revelar existencia). */
     private val dummyHash: String by lazy { hasher.hash("dummy-password-for-timing") }
@@ -98,12 +116,55 @@ class AuthService(
         // sempre exatamente um verify, exista a conta ou nao
         val ok = hasher.verify(password, account?.passwordHash ?: dummyHash) && account != null
         return if (ok && account != null) {
-            guard.recordSuccess(ip, key)
             upgradeHashIfNeeded(account, password)
-            LoginResult.Success(sessions.startSession(account.id, deviceLabel))
+            afterPassword(ip, key, account, deviceLabel)
         } else {
             guard.recordFailure(ip, key)
             LoginResult.InvalidCredentials
+        }
+    }
+
+    private fun afterPassword(
+        ip: String,
+        key: String,
+        account: AccountRecord,
+        deviceLabel: String?,
+    ): LoginResult =
+        when (mfa.gate(account)) {
+            // sem recordSuccess: as falhas seguem contando ate o codigo conferir
+            MfaGate.CODE -> LoginResult.MfaRequired(mfa.open(account.id, key, deviceLabel))
+            MfaGate.ENROLL -> {
+                guard.recordSuccess(ip, key)
+                LoginResult.MfaEnrollmentRequired(mfa.enrollOnlyToken(account.id))
+            }
+            MfaGate.NONE -> {
+                guard.recordSuccess(ip, key)
+                LoginResult.Success(sessions.startSession(account.id, deviceLabel))
+            }
+        }
+
+    /** Segundo passo: cada codigo errado conta no [LoginGuard] como uma senha errada. */
+    fun loginMfa(
+        ip: String,
+        mfaToken: String,
+        code: String,
+    ): LoginResult {
+        val key = mfa.peek(mfaToken)?.handleKey ?: return LoginResult.InvalidMfa
+        val decision = guard.check(ip, key)
+        return if (decision is GuardDecision.Blocked) {
+            LoginResult.Throttled(decision.retryAfterSeconds)
+        } else {
+            when (val r = mfa.redeem(mfaToken, code)) {
+                is MfaRedeem.Ok -> {
+                    guard.recordSuccess(ip, key)
+                    LoginResult.Success(sessions.startSession(r.challenge.accountId, r.challenge.deviceLabel, true))
+                }
+                MfaRedeem.Wrong -> {
+                    guard.recordFailure(ip, key)
+                    LoginResult.InvalidMfa
+                }
+                MfaRedeem.Unknown -> LoginResult.InvalidMfa
+            }
         }
     }
 

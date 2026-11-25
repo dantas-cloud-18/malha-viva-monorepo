@@ -108,6 +108,9 @@ interface TotpRepository {
         expectedLast: Long,
         step: Long,
     ): Boolean
+
+    /** Apaga o segredo (desliga o 2FA). */
+    fun delete(accountId: UUID)
 }
 
 class TotpEnrollment(
@@ -117,10 +120,8 @@ class TotpEnrollment(
 
 /**
  * Enrolamento e verificacao de TOTP. O segredo e guardado cifrado (AES-GCM, chave derivada de
- * MALHAVIVA_OTP_KEY, ligada ao id da conta) e nunca e logado.
- *
- * NAO INTEGRADO AO LOGIN nem exposto em rotas: so as primitivas. O gatilho `totpRequired` para contas com
- * papel admin depende de papeis que ainda nao existem (admin web e Fase posterior).
+ * MALHAVIVA_OTP_KEY, ligada ao id da conta) e nunca e logado, assim como os codigos.
+ * Integrado ao login por [br.malhaviva.auth.MfaService].
  */
 class TotpService(
     private val repo: TotpRepository,
@@ -198,4 +199,10 @@ class TotpService(
         val step = rec?.let { Totp.verify(decrypt(accountId, it.secretEnc), code, clock(), it.lastStep) }
         return rec != null && step != null && repo.advance(accountId, rec.lastStep, step)
     }
+
+    /** Desliga com um codigo valido e ainda nao usado. */
+    fun disable(
+        accountId: UUID,
+        code: String,
+    ): Boolean = verify(accountId, code).also { if (it) repo.delete(accountId) }
 }

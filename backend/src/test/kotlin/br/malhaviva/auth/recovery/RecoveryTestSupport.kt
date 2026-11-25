@@ -237,6 +237,11 @@ class InMemoryTotpRepository : TotpRepository {
         if (r.lastStep == expectedLast) rows[accountId] = TotpRecord(r.secretEnc, r.enabled, step)
         return r.lastStep == expectedLast
     }
+
+    @Synchronized
+    override fun delete(accountId: UUID) {
+        rows.remove(accountId)
+    }
 }
 
 /** Limites generosos: cada teste que quer limite apertado passa o seu. */

@@ -90,7 +90,8 @@ class RecoveryCodes(
  * Nao revela se a conta existe: o pedido responde sempre igual e todo o trabalho que depende da conta roda em
  * segundo plano ([background]); a conclusao falha igual para handle inexistente e OTP errado. O canal que nao
  * recebe OTP recebe um aviso. Ao concluir: senha nova, TODAS as sessoes revogadas, trocas de contato
- * pendentes canceladas e aviso a todos os canais.
+ * pendentes canceladas e aviso a todos os canais. O TOTP NAO e removido: depois do reset o login segue exigindo o
+ * codigo (obrigatorio para admin), entao a recuperacao nao contorna o 2FA.
  *
  * Suppress: injecao de dependencias; agrupar so deslocaria os parametros do construtor.
  */

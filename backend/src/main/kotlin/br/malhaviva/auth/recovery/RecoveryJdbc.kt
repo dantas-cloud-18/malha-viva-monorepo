@@ -303,4 +303,8 @@ class JdbcTotpRepository(
                 expectedLast,
             )
         } == 1
+
+    override fun delete(accountId: UUID) {
+        dataSource.read { it.update("DELETE FROM totp_secrets WHERE account_id = ?", accountId) }
+    }
 }
