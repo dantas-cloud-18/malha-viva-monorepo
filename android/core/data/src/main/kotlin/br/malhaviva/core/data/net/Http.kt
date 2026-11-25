@@ -1,4 +1,4 @@
-package br.malhaviva.feature.tracking.net
+package br.malhaviva.core.data.net
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -15,6 +15,8 @@ class HttpRequest(
 class HttpResponse(
     val status: Int,
     val body: String,
+    /** Nomes em minusculas. */
+    val headers: Map<String, String> = emptyMap(),
 )
 
 /** Camada HTTP minima, trocavel por um falso nos testes. Falha de rede lanca IOException. */
@@ -38,7 +40,13 @@ class UrlConnectionTransport : HttpTransport {
                 val status = connection.responseCode
                 val failed = status >= HttpURLConnection.HTTP_BAD_REQUEST
                 val stream = if (failed) connection.errorStream else connection.inputStream
-                HttpResponse(status, stream?.bufferedReader()?.use { it.readText() }.orEmpty())
+                val headers =
+                    connection.headerFields
+                        .filterKeys {
+                            it != null
+                        }.mapKeys { it.key.lowercase() }
+                        .mapValues { it.value.last() }
+                HttpResponse(status, stream?.bufferedReader()?.use { it.readText() }.orEmpty(), headers)
             } finally {
                 connection.disconnect()
             }

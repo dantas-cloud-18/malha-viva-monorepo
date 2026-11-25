@@ -1,5 +1,7 @@
 package br.malhaviva.feature.tracking.net
 
+import br.malhaviva.core.data.net.HttpRequest
+import br.malhaviva.core.data.net.HttpTransport
 import br.malhaviva.core.domain.checkin.GeoPoint
 import br.malhaviva.core.domain.checkin.Station
 import br.malhaviva.core.domain.tracking.Route

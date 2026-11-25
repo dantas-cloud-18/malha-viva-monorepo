@@ -1,5 +1,8 @@
 package br.malhaviva.feature.tracking.net
 
+import br.malhaviva.core.data.net.HttpRequest
+import br.malhaviva.core.data.net.HttpResponse
+import br.malhaviva.core.data.net.HttpTransport
 import br.malhaviva.core.domain.sampling.Sample
 import br.malhaviva.core.domain.sampling.SampleBatch
 import kotlinx.coroutines.test.runTest

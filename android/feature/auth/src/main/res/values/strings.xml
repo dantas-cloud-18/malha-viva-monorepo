@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="auth_login_title">Entrar</string>
+    <string name="auth_handle_label">Seu @nome</string>
+    <string name="auth_password_label">Senha</string>
+    <string name="auth_password_hint">Use de 8 a 128 caracteres. Não exigimos letras maiúsculas, números ou símbolos: uma frase longa é melhor.</string>
+    <string name="auth_login_action">Entrar</string>
+    <string name="auth_go_signup">Criar conta</string>
+    <string name="auth_go_login">Já tenho conta</string>
+    <string name="auth_back">Voltar</string>
+    <string name="auth_loading">Aguarde…</string>
+
+    <string name="auth_mfa_title">Verificação em duas etapas</string>
+    <string name="auth_mfa_totp_label">Código do app autenticador (6 dígitos)</string>
+    <string name="auth_mfa_backup_label">Código de backup</string>
+    <string name="auth_mfa_use_backup">Usar código de backup</string>
+    <string name="auth_mfa_use_totp">Usar código do app autenticador</string>
+    <string name="auth_mfa_action">Confirmar</string>
+
+    <string name="auth_signup_title">Criar conta</string>
+    <string name="auth_signup_handle_hint">O @nome é público. Use de 3 a 20 letras, números ou _.</string>
+    <string name="auth_email_label">E-mail para recuperação (opcional)</string>
+    <string name="auth_signup_action">Criar conta</string>
+
+    <string name="auth_enroll_title">Ative a verificação em duas etapas</string>
+    <string name="auth_enroll_message">Contas de administrador precisam do segundo fator. Configure o app autenticador e entre de novo.</string>
+
+    <string name="auth_devices_title">Dispositivos conectados</string>
+    <string name="auth_devices_empty">Nenhum dispositivo na lista.</string>
+    <string name="auth_devices_last_used">Último uso: %1$s</string>
+    <string name="auth_device_revoke">Desconectar</string>
+    <string name="auth_logout">Sair deste aparelho</string>
+
+    <string name="auth_msg_bad_credentials">@nome ou senha incorretos.</string>
+    <string name="auth_msg_invalid_mfa">Código incorreto ou vencido. Se vencer, volte e entre de novo.</string>
+    <string name="auth_msg_invalid_password">Senha atual incorreta.</string>
+    <string name="auth_msg_captcha_required">Verificação anti-robô necessária. Tente de novo em instantes.</string>
+    <string name="auth_msg_captcha_unavailable">A verificação anti-robô ainda não está disponível nesta versão do app. Cadastre-se sem e-mail ou tente mais tarde.</string>
+    <string name="auth_msg_admin_mfa">Esta área exige verificação em duas etapas.</string>
+    <string name="auth_msg_too_large">Os dados enviados são grandes demais.</string>
+    <string name="auth_msg_rate_limited">Muitas tentativas. Aguarde um pouco e tente de novo.</string>
+    <string name="auth_msg_rate_limited_seconds">Muitas tentativas. Tente de novo em %1$d s.</string>
+    <string name="auth_msg_handle_taken">Esse @nome não está disponível.</string>
+    <string name="auth_msg_invalid_input">Confira os dados informados.</string>
+    <string name="auth_msg_network">Sem conexão com o servidor. Tente de novo.</string>
+    <string name="auth_msg_generic">Algo deu errado. Tente de novo.</string>
+    <string name="auth_msg_session_expired">Sua sessão terminou. Entre de novo.</string>
+    <string name="auth_msg_account_created">Conta criada. Entre para continuar.</string>
+</resources>

@@ -1,10 +1,10 @@
 package br.malhaviva.app
 
 import android.app.Application
+import br.malhaviva.core.data.net.UrlConnectionTransport
 import br.malhaviva.feature.tracking.TrackingEnvironment
 import br.malhaviva.feature.tracking.net.HttpBatchUploader
 import br.malhaviva.feature.tracking.net.NetworkRouteProvider
-import br.malhaviva.feature.tracking.net.UrlConnectionTransport
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

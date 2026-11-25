@@ -8,6 +8,7 @@ android {
 
 dependencies {
     implementation(projects.core.domain)
+    api(libs.coroutines.android)
 
     testImplementation(libs.junit)
 }
