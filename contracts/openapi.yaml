@@ -969,7 +969,8 @@ paths:
       operationId: correctMyData
       summary: Corrigir dados (LGPD art. 18, III)
       description: >
-        Hoje corrige o `handle` (único, 409 se indisponível). Telefone e e-mail são corrigidos em `/me/contacts`
+        Corrige o `handle` (único, 409 se indisponível) e define ou apaga o `gender` opcional (valor inválido: 400
+        `invalid_gender`). Corpo sem nenhum dos dois: 400. Telefone e e-mail são corrigidos em `/me/contacts`
         (com OTP). A faixa etária não é autoatendimento (evita burlar o portão de idade): correção pelo canal do
         Encarregado.
       security:
@@ -980,8 +981,14 @@ paths:
           application/json:
             schema:
               type: object
+              minProperties: 1
               properties:
                 handle: { $ref: "#/components/schemas/Handle" }
+                gender:
+                  description: Define o gênero opcional; `null` apaga (volta a "não informado"). Ausente = não altera.
+                  oneOf:
+                    - { $ref: "#/components/schemas/Gender" }
+                    - { type: "null" }
       responses:
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "200":
@@ -1088,6 +1095,9 @@ components:
         password: { type: string, minLength: 8, maxLength: 128 }
         birth_date: { type: string, format: date, description: "Autodeclarada; usada só para calcular a faixa etária e descartada (não é guardada)." }
         guardian: { $ref: "#/components/schemas/Guardian" }
+        gender:
+          allOf: [{ $ref: "#/components/schemas/Gender" }]
+          description: Opcional. Ausente = não informado (diferente de `prefer_not_to_say`). Valor fora do enum responde 400 `invalid_gender`.
         phone: { type: string, pattern: "^\\+[1-9][0-9]{7,14}$", description: E.164. }
         email: { type: string, format: email, maxLength: 254 }
         captcha_token: { type: string, description: Exigido quando há telefone ou e-mail (o cadastro envia mensagem). }
@@ -1110,6 +1120,9 @@ components:
         handle: { $ref: "#/components/schemas/Handle" }
         age_bracket: { $ref: "#/components/schemas/AgeBracket" }
         status: { $ref: "#/components/schemas/AccountStatus" }
+        gender:
+          allOf: [{ $ref: "#/components/schemas/Gender" }]
+          description: Ausente quando não informado.
         contacts_verified:
           type: object
           required: [phone, email]
@@ -1322,6 +1335,13 @@ components:
       description: >
         Faixa etária autodeclarada no cadastro. O servidor calcula a faixa a partir de `birth_date` e NÃO guarda a
         data de nascimento (minimização). Autodeclaração não é verificação; é o portão mínimo desta fase.
+    Gender:
+      type: string
+      enum: [male, female, non_binary, prefer_not_to_say]
+      description: >
+        Gênero autodeclarado e opcional, só para estatísticas agregadas e anônimas de perfil de uso (buckets com menos
+        de 5 contas são suprimidos). Nunca é exibido por pessoa nem cruzado com localização, viagens ou telemetria.
+        Ausente/null = não informado, o que é diferente de `prefer_not_to_say`. Apagado na exclusão da conta.
     AccountStatus:
       type: string
       enum: [active, pending_parental_consent]
@@ -1378,6 +1398,10 @@ components:
             created_at: { type: string, format: date-time }
             age_bracket: { $ref: "#/components/schemas/AgeBracket" }
             status: { $ref: "#/components/schemas/AccountStatus" }
+            gender:
+              oneOf:
+                - { $ref: "#/components/schemas/Gender" }
+                - { type: "null" }
             totp_enabled: { type: boolean }
         contacts:
           type: object
