@@ -21,8 +21,12 @@ import br.malhaviva.tracking.ingest.ingestRoutes
 import br.malhaviva.tracking.ingest.integrityVerifierFromEnv
 import br.malhaviva.tracking.ingest.tokenRoutes
 import br.malhaviva.tracking.live.ClusterPolicy
+import br.malhaviva.tracking.live.CrowdingPolicy
 import br.malhaviva.tracking.live.LiveHub
+import br.malhaviva.tracking.live.StationCrowdingEstimator
+import br.malhaviva.tracking.live.StationRef
 import br.malhaviva.tracking.live.TrainClusterer
+import br.malhaviva.tracking.live.crowdingRoutes
 import br.malhaviva.tracking.live.liveRoutes
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -41,6 +45,8 @@ import io.ktor.server.sse.SSE
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 import javax.sql.DataSource
+
+private const val METERS_PER_KM = 1000.0
 
 private val log = LoggerFactory.getLogger("br.malhaviva.Application")
 
@@ -89,8 +95,14 @@ fun Application.module(
     routing {
         route("/v1") {
             healthRoutes(dataSource)
-            networkRoutes(NetworkRepository(dataSource))
+            val network = NetworkRepository(dataSource)
+            networkRoutes(network)
             liveRoutes(liveHub)
+            crowdingRoutes(
+                liveHub,
+                { c -> network.find(c)?.stations?.map { StationRef(it.stationId, it.km * METERS_PER_KM) } },
+                StationCrowdingEstimator(CrowdingPolicy.minContributorsFromEnv(System::getenv)),
+            )
             ingestRoutes(BatchIngestor(tokens, geometry, liveHub))
             tokenRoutes(TokenIssuer(tokens), integrity)
             auth?.let { authRoutes(it) }

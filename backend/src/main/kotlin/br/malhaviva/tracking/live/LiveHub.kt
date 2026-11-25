@@ -64,6 +64,13 @@ class LiveHub(
             if (last != null && clock() - last < snapshotTtlMs) trains[key].orEmpty() else recompute(key)
         }
 
+    /** Ultima posicao fresca de cada id efemero (uma por viagem), sem os ids. Para a lotacao de estacao. */
+    fun freshPositions(key: LineKey): List<PassengerPosition> =
+        synchronized(this) {
+            val now = clock()
+            positions[key].orEmpty().values.filter { now - it.tsMs <= ClusterPolicy.MAX_AGE_MS }
+        }
+
     /** Remove posicoes velhas, reagrupa e guarda o resultado. Chamar dentro do lock. */
     private fun recompute(key: LineKey): List<TrainState> {
         val now = clock()

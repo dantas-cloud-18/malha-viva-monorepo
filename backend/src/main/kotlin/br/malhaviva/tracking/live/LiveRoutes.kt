@@ -34,7 +34,7 @@ data class TrainsSnapshot(
     val trains: List<TrainState>,
 )
 
-private fun lineKey(
+internal fun lineKey(
     corridor: String?,
     direction: String?,
 ): LineKey? {
@@ -95,7 +95,7 @@ private fun connectionCap(connections: ConnectionLimiter) =
         on(CallFailed) { call, _ -> call.releaseConnection(connections) }
     }
 
-private suspend fun RoutingCall.badLine() {
+internal suspend fun RoutingCall.badLine() {
     val status = HttpStatusCode.BadRequest
     respond(status, Problem("about:blank", "Invalid corridor or direction", status.value))
 }
