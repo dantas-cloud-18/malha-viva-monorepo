@@ -66,7 +66,22 @@ class SignupAgeGateTest {
             val body = t.bodyOf(t.sent("POST /auth/accounts").single())
             assertEquals("1990-02-01", body.getString("birth_date"))
             assertFalse(body.has("guardian"))
+            assertFalse("sem escolha o genero nao e enviado", body.has("gender"))
             assertEquals(AuthMessage.AccountCreated, vm.state.value.message)
+        }
+
+    @Test
+    fun `chosen gender is sent and the default is not informed`() =
+        runTest {
+            t.on("POST /auth/accounts", json(201, """{"handle":"@ana","age_bracket":"adult","status":"active"}"""))
+            val vm = AuthViewModel(env.session, env.account)
+            assertNull(vm.state.value.gender)
+            vm.fill("01/02/1990")
+            vm.act(AuthIntent.GenderChanged(Gender.NonBinary))
+            vm.act(AuthIntent.GenderChanged(Gender.PreferNotToSay))
+            vm.act(AuthIntent.SubmitSignup)
+            assertEquals("prefer_not_to_say", t.bodyOf(t.sent("POST /auth/accounts").single()).getString("gender"))
+            assertNull("estado limpo apos o cadastro", vm.state.value.gender)
         }
 
     @Test

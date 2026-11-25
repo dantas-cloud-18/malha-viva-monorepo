@@ -63,6 +63,8 @@ data class NewAccount(
     val guardian: Guardian? = null,
     val phone: String? = null,
     val email: String? = null,
+    /** Valor de rede do genero opcional (`male`...); null = nao enviar. */
+    val gender: String? = null,
 )
 
 /** Contato do responsavel (menor de 12 anos): `channel` e `phone` ou `email`. */
@@ -75,6 +77,8 @@ data class Guardian(
 data class AccountInfo(
     val handle: String,
     val ageBracket: String?,
+    /** `male`, `female`, `non_binary`, `prefer_not_to_say`; null = nao informado. */
+    val gender: String? = null,
 )
 
 data class Consent(

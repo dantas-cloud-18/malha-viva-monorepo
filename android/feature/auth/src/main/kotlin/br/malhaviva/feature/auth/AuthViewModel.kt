@@ -86,7 +86,15 @@ class AuthViewModel(
             }
         val result =
             session.signup(
-                NewAccount(normalizeHandle(form.handle), form.password, birth.toString(), guardian, phone, email),
+                NewAccount(
+                    normalizeHandle(form.handle),
+                    form.password,
+                    birth.toString(),
+                    guardian,
+                    phone,
+                    email,
+                    form.gender?.wire,
+                ),
             )
         when (result) {
             is ApiResult.Ok ->

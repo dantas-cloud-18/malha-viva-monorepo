@@ -45,6 +45,7 @@ enum class AuthMessage {
     MarketingForbidden,
     ConsentSaved,
     HandleUpdated,
+    GenderUpdated,
     AccountDeleted,
     ExportReady,
 }
@@ -67,6 +68,7 @@ private val NOTICES =
         AuthMessage.AccountCreatedParental,
         AuthMessage.ConsentSaved,
         AuthMessage.HandleUpdated,
+        AuthMessage.GenderUpdated,
         AuthMessage.AccountDeleted,
         AuthMessage.ExportReady,
     )
@@ -82,6 +84,8 @@ data class AuthState(
     val phone: String = DEFAULT_PHONE,
     /** Nascimento digitado como dd/mm/aaaa; so a faixa etaria sai do aparelho para o servidor. */
     val birthDate: String = "",
+    /** Opcional: null = "Nao informar" (nada e enviado ao servidor). */
+    val gender: Gender? = null,
     val guardianChannel: ContactChannel = ContactChannel.Phone,
     val guardian: String = DEFAULT_PHONE,
     val today: LocalDate = LocalDate.now(),
@@ -135,6 +139,10 @@ sealed interface AuthIntent {
 
     data class BirthDateChanged(
         val value: String,
+    ) : AuthIntent
+
+    data class GenderChanged(
+        val value: Gender?,
     ) : AuthIntent
 
     data class GuardianChannelChanged(
@@ -278,6 +286,7 @@ private fun reduceEdit(
         is AuthIntent.EmailChanged -> state.copy(email = intent.value, message = null)
         is AuthIntent.PhoneChanged -> state.copy(phone = intent.value, message = null)
         is AuthIntent.BirthDateChanged -> state.copy(birthDate = intent.value.trim(), message = null)
+        is AuthIntent.GenderChanged -> state.copy(gender = intent.value, message = null)
         is AuthIntent.GuardianChannelChanged ->
             state.copy(
                 guardianChannel = intent.value,

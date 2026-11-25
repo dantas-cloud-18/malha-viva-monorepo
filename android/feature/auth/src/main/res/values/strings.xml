@@ -123,6 +123,15 @@
     <string name="auth_guardian_phone_label">Telefone do responsável com DDI</string>
     <string name="auth_guardian_email_label">E-mail do responsável</string>
 
+    <string name="auth_gender_label">Gênero (opcional)</string>
+    <string name="auth_gender_hint">Só para estatísticas agregadas e anônimas. Nunca aparece para outras pessoas nem se liga à sua localização ou às suas viagens. Você pode mudar ou apagar depois em Privacidade e meus dados.</string>
+    <string name="auth_gender_none">Não informar</string>
+    <string name="auth_gender_male">Masculino</string>
+    <string name="auth_gender_female">Feminino</string>
+    <string name="auth_gender_non_binary">Não-binário</string>
+    <string name="auth_gender_prefer_not">Prefiro não dizer</string>
+    <string name="auth_gender_not_informed">Não informado</string>
+
     <string name="auth_go_parental">Tenho o código do responsável</string>
     <string name="auth_parental_title">Autorização do responsável</string>
     <string name="auth_parental_info">Sua conta aguarda a autorização de um responsável. Peça a ele o código de 6 dígitos que enviamos ao contato dele e digite aqui.</string>
@@ -151,6 +160,8 @@
     <string name="auth_privacy_export_chooser">Salvar ou enviar meus dados</string>
     <string name="auth_privacy_edit_handle">Corrigir meu @nome</string>
     <string name="auth_privacy_new_handle">Novo @nome</string>
+    <string name="auth_privacy_gender_current">Gênero (opcional): %1$s</string>
+    <string name="auth_privacy_edit_gender">Alterar ou apagar meu gênero</string>
     <string name="auth_privacy_save">Salvar</string>
     <string name="auth_privacy_delete">Excluir minha conta</string>
     <string name="auth_privacy_delete_warning">Isto apaga sua conta e seus dados pessoais e não pode ser desfeito. Digite sua senha para confirmar.</string>
@@ -164,6 +175,7 @@
     <string name="auth_msg_marketing_forbidden">Não enviamos promoções para menores de 18 anos.</string>
     <string name="auth_msg_consent_saved">Pronto, sua escolha foi salva.</string>
     <string name="auth_msg_handle_updated">@nome atualizado.</string>
+    <string name="auth_msg_gender_updated">Gênero atualizado.</string>
     <string name="auth_msg_account_deleted">Sua conta e seus dados foram excluídos.</string>
     <string name="auth_msg_export_ready">Seus dados estão prontos. Escolha onde salvar ou enviar.</string>
 </resources>

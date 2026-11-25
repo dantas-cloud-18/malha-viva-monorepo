@@ -157,6 +157,7 @@ private val MESSAGE_RES =
         AuthMessage.MarketingForbidden to R.string.auth_msg_marketing_forbidden,
         AuthMessage.ConsentSaved to R.string.auth_msg_consent_saved,
         AuthMessage.HandleUpdated to R.string.auth_msg_handle_updated,
+        AuthMessage.GenderUpdated to R.string.auth_msg_gender_updated,
         AuthMessage.AccountDeleted to R.string.auth_msg_account_deleted,
         AuthMessage.ExportReady to R.string.auth_msg_export_ready,
     )

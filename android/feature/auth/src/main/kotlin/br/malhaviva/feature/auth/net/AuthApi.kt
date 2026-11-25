@@ -58,6 +58,7 @@ class AuthApi(
             }
             account.phone?.let { put("phone", it) }
             account.email?.let { put("email", it) }
+            account.gender?.let { put("gender", it) }
             captchaToken?.let { put("captcha_token", it) }
         }
 

@@ -49,6 +49,13 @@ class PrivacyApi(
             obj(::accountInfo),
         ) { put("handle", handle) }
 
+    /** Define o genero opcional; `null` apaga (volta a "nao informado"). Devolve a conta como ficou gravada. */
+    suspend fun setGender(
+        accessToken: String,
+        gender: String?,
+    ): ApiResult<AccountInfo> =
+        client.call("PATCH", "/me", accessToken, obj(::accountInfo)) { put("gender", gender ?: JSONObject.NULL) }
+
     suspend fun deleteAccount(
         accessToken: String,
         currentPassword: String,
@@ -56,7 +63,11 @@ class PrivacyApi(
 }
 
 private fun accountInfo(json: JSONObject) =
-    AccountInfo(json.getString("handle"), json.optString("age_bracket").ifEmpty { null })
+    AccountInfo(
+        json.getString("handle"),
+        json.optString("age_bracket").ifEmpty { null },
+        if (json.isNull("gender")) null else json.getString("gender"),
+    )
 
 private fun consentList(json: JSONObject): ConsentList {
     val array = json.getJSONArray("consents")

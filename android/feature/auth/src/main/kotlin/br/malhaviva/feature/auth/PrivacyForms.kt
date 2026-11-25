@@ -42,6 +42,7 @@ internal fun PrivacyFlow(
         PrivacyStep.Main -> PrivacyMain(state, viewModel::act) { onMain(AuthIntent.GoDevices) }
         PrivacyStep.History -> HistoryList(state, viewModel::act)
         PrivacyStep.EditHandle -> EditHandleForm(state, viewModel::act)
+        PrivacyStep.EditGender -> EditGenderForm(state, viewModel::act)
         PrivacyStep.Delete -> DeleteForm(state, viewModel::act)
     }
     StatusLine(state.busy, state.message, state.retryAfterSeconds)
@@ -94,6 +95,12 @@ private fun PrivacyMain(
     }
     OutlinedButton({ onIntent(PrivacyIntent.StartEditHandle) }, enabled = !state.busy) {
         Text(stringResource(R.string.auth_privacy_edit_handle))
+    }
+    if (state.genderLoaded) {
+        Hint(stringResource(R.string.auth_privacy_gender_current, stringResource(genderLabel(state.gender))))
+    }
+    OutlinedButton({ onIntent(PrivacyIntent.StartEditGender) }, enabled = !state.busy && state.genderLoaded) {
+        Text(stringResource(R.string.auth_privacy_edit_gender))
     }
     OutlinedButton({ onIntent(PrivacyIntent.StartDelete) }, enabled = !state.busy) {
         Text(stringResource(R.string.auth_privacy_delete))
@@ -160,6 +167,19 @@ private fun EditHandleForm(
     CheckInButton(stringResource(R.string.auth_privacy_save), {
         onIntent(PrivacyIntent.SubmitHandle)
     }, enabled = state.canSaveHandle)
+    TextButton({ onIntent(PrivacyIntent.Back) }) { Text(stringResource(R.string.auth_back)) }
+}
+
+@Composable
+private fun EditGenderForm(
+    state: PrivacyState,
+    onIntent: (PrivacyIntent) -> Unit,
+) {
+    Title(stringResource(R.string.auth_privacy_edit_gender))
+    GenderPicker(state.draftGender, !state.busy) { onIntent(PrivacyIntent.GenderPicked(it)) }
+    CheckInButton(stringResource(R.string.auth_privacy_save), {
+        onIntent(PrivacyIntent.SubmitGender)
+    }, enabled = state.canSaveGender)
     TextButton({ onIntent(PrivacyIntent.Back) }) { Text(stringResource(R.string.auth_back)) }
 }
 

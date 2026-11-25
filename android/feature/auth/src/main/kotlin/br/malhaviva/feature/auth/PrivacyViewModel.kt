@@ -31,7 +31,10 @@ class PrivacyViewModel(
     fun act(intent: PrivacyIntent) {
         val before = state.value
         onIntent(intent)
-        val submit = intent == PrivacyIntent.SubmitHandle || intent == PrivacyIntent.SubmitDelete
+        val submit =
+            intent == PrivacyIntent.SubmitHandle ||
+                intent == PrivacyIntent.SubmitGender ||
+                intent == PrivacyIntent.SubmitDelete
         if (submit && (before.busy || !state.value.busy)) return
         viewModelScope.launch {
             when (intent) {
@@ -39,6 +42,7 @@ class PrivacyViewModel(
                 is PrivacyIntent.Toggle -> toggle(intent)
                 PrivacyIntent.ShowHistory -> history()
                 PrivacyIntent.SubmitHandle -> saveHandle(before)
+                PrivacyIntent.SubmitGender -> saveGender(before)
                 PrivacyIntent.SubmitDelete -> delete(before)
                 PrivacyIntent.Export -> export()
                 else -> Unit
@@ -51,7 +55,21 @@ class PrivacyViewModel(
             is ApiResult.Ok -> {
                 locationListener.onLocationConsent(result.value.isLocationGranted())
                 onIntent(PrivacyIntent.Loaded(result.value))
+                loadGender()
             }
+            is ApiResult.Fail -> onIntent(PrivacyIntent.Failed(result.error))
+        }
+    }
+
+    /** Falha aqui so deixa a opcao de genero indisponivel; o resto da tela segue funcionando. */
+    private suspend fun loadGender() {
+        val result = session.authed { privacy.getAccount(it) }
+        if (result is ApiResult.Ok) onIntent(PrivacyIntent.AccountLoaded(Gender.fromWire(result.value.gender)))
+    }
+
+    private suspend fun saveGender(form: PrivacyState) {
+        when (val result = session.authed { privacy.setGender(it, form.draftGender?.wire) }) {
+            is ApiResult.Ok -> onIntent(PrivacyIntent.GenderSaved(Gender.fromWire(result.value.gender)))
             is ApiResult.Fail -> onIntent(PrivacyIntent.Failed(result.error))
         }
     }

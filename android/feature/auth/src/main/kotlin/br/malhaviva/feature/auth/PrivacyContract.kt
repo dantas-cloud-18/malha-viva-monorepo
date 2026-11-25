@@ -12,7 +12,7 @@ enum class ConsentPurpose(
     Marketing("marketing"),
 }
 
-enum class PrivacyStep { Main, History, EditHandle, Delete }
+enum class PrivacyStep { Main, History, EditHandle, EditGender, Delete }
 
 /**
  * Privacidade (LGPD). Nada comeca concedido. `marketingForbidden` e aprendido do servidor (403
@@ -28,6 +28,10 @@ data class PrivacyState(
     val locationForbidden: Boolean = false,
     val history: List<ConsentEvent> = emptyList(),
     val newHandle: String = "",
+    /** Genero vigente no servidor (null = nao informado); so vale depois de [genderLoaded]. */
+    val gender: Gender? = null,
+    val genderLoaded: Boolean = false,
+    val draftGender: Gender? = null,
     val password: String = "",
     /** JSON do export, so em memoria ate a tela entregar ao compartilhamento do sistema. */
     val exportJson: String? = null,
@@ -39,6 +43,7 @@ data class PrivacyState(
     val deleted: Boolean = false,
 ) {
     val canSaveHandle get() = !busy && isHandleValid(newHandle)
+    val canSaveGender get() = !busy && genderLoaded && draftGender != gender
     val canDelete get() = !busy && password.isNotEmpty() && password.length <= PASSWORD_MAX
 }
 
@@ -57,6 +62,23 @@ sealed interface PrivacyIntent {
     data object ShowHistory : PrivacyIntent
 
     data object StartEditHandle : PrivacyIntent
+
+    data object StartEditGender : PrivacyIntent
+
+    data class GenderPicked(
+        val value: Gender?,
+    ) : PrivacyIntent
+
+    data object SubmitGender : PrivacyIntent
+
+    /** Genero vigente lido de `GET /me`. */
+    data class AccountLoaded(
+        val gender: Gender?,
+    ) : PrivacyIntent
+
+    data class GenderSaved(
+        val gender: Gender?,
+    ) : PrivacyIntent
 
     data object StartDelete : PrivacyIntent
 
@@ -133,6 +155,20 @@ private fun reducePrivacyEdit(
     when (intent) {
         is PrivacyIntent.HandleChanged -> state.copy(newHandle = intent.value.trim(), message = null)
         is PrivacyIntent.PasswordChanged -> state.copy(password = intent.value, message = null)
+        else -> reduceGender(state, intent)
+    }
+
+private fun reduceGender(
+    state: PrivacyState,
+    intent: PrivacyIntent,
+): PrivacyState =
+    when (intent) {
+        PrivacyIntent.StartEditGender -> clean(state).copy(step = PrivacyStep.EditGender, draftGender = state.gender)
+        is PrivacyIntent.GenderPicked -> state.copy(draftGender = intent.value, message = null)
+        PrivacyIntent.SubmitGender -> if (state.canSaveGender) state.copy(busy = true, message = null) else state
+        is PrivacyIntent.AccountLoaded -> state.copy(gender = intent.gender, genderLoaded = true)
+        is PrivacyIntent.GenderSaved ->
+            clean(state).copy(gender = intent.gender, genderLoaded = true, message = AuthMessage.GenderUpdated)
         else -> reducePrivacyResult(state, intent)
     }
 

@@ -22,9 +22,12 @@ class PrivacyViewModelTest {
             """{"purpose":"location","granted":false,"current_policy_version":"2026-11-25"},""" +
             """{"purpose":"marketing","granted":false,"current_policy_version":"2026-11-25"}]}"""
 
+    private val me = """{"handle":"@ana","age_bracket":"adult","status":"active","gender":null}"""
+
     private suspend fun opened(first: String = none): PrivacyViewModel {
         env.signIn()
         t.on("GET /me/consents", json(200, first))
+        t.on("GET /me", json(200, me))
         return PrivacyViewModel(env.session, env.privacy).also { it.act(PrivacyIntent.Open) }
     }
 
@@ -138,6 +141,56 @@ class PrivacyViewModelTest {
             assertEquals(AuthMessage.HandleUpdated, vm.state.value.message)
             assertEquals(PrivacyStep.Main, vm.state.value.step)
             assertTrue("faixa 12-17 esconde o marketing", vm.state.value.marketingForbidden)
+        }
+
+    @Test
+    fun `gender is read from me and null means not informed`() =
+        runTest {
+            val state = opened().state.value
+            assertTrue(state.genderLoaded)
+            assertNull(state.gender)
+        }
+
+    @Test
+    fun `changing gender sends PATCH me and clearing sends an explicit null`() =
+        runTest {
+            val vm = opened()
+            t.on(
+                "PATCH /me",
+                json(200, """{"handle":"@ana","age_bracket":"adult","status":"active","gender":"female"}"""),
+                json(200, """{"handle":"@ana","age_bracket":"adult","status":"active","gender":null}"""),
+            )
+            vm.act(PrivacyIntent.StartEditGender)
+            assertEquals(PrivacyStep.EditGender, vm.state.value.step)
+            vm.act(PrivacyIntent.SubmitGender)
+            assertTrue("sem mudanca nada e enviado", t.sent("PATCH /me").isEmpty())
+            vm.act(PrivacyIntent.GenderPicked(Gender.Female))
+            vm.act(PrivacyIntent.SubmitGender)
+            assertEquals("female", t.bodyOf(t.sent("PATCH /me").single()).getString("gender"))
+            assertEquals(Gender.Female, vm.state.value.gender)
+            assertEquals(AuthMessage.GenderUpdated, vm.state.value.message)
+            assertEquals(PrivacyStep.Main, vm.state.value.step)
+
+            vm.act(PrivacyIntent.StartEditGender)
+            assertEquals(Gender.Female, vm.state.value.draftGender)
+            vm.act(PrivacyIntent.GenderPicked(null))
+            vm.act(PrivacyIntent.SubmitGender)
+            val clear = t.bodyOf(t.sent("PATCH /me").last())
+            assertTrue(clear.has("gender") && clear.isNull("gender"))
+            assertNull(vm.state.value.gender)
+        }
+
+    @Test
+    fun `gender save failure keeps the editor open with the error`() =
+        runTest {
+            val vm = opened()
+            t.on("PATCH /me", problem(400, "invalid_gender"))
+            vm.act(PrivacyIntent.StartEditGender)
+            vm.act(PrivacyIntent.GenderPicked(Gender.Male))
+            vm.act(PrivacyIntent.SubmitGender)
+            assertEquals(PrivacyStep.EditGender, vm.state.value.step)
+            assertEquals(AuthMessage.InvalidInput, vm.state.value.message)
+            assertNull(vm.state.value.gender)
         }
 
     @Test

@@ -84,6 +84,7 @@ internal fun SignupForm(
     )
     Hint(stringResource(R.string.auth_birth_hint))
     if (state.needsGuardian) GuardianFields(state, onIntent)
+    GenderPicker(state.gender, !state.busy) { onIntent(AuthIntent.GenderChanged(it)) }
     Field(
         stringResource(R.string.auth_email_label),
         state.email,
