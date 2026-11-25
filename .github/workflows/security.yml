@@ -45,23 +45,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Cobertura: osv-scanner le gradle.lockfile, buildscript-gradle.lockfile e verification-metadata.xml.
-      # O repositorio ainda nao tem lockfiles Gradle (dependencias ficam em libs.versions.toml, que o scanner
-      # nao le). Sem lockfile o job so avisa; o Trivy fs abaixo tambem depende de lockfiles.
-      # Pendencia: habilitar dependencyLocking no Gradle de backend/ e android/ para ativar este gate.
-      - name: detectar lockfiles
-        id: lock
+      # Escaneia os gradle.lockfile de backend/ e android/ (dependencyLocking; atualizar com --write-locks).
+      # Sem lockfile o job falha: gate silencioso nao protege. Vulnerabilidade encontrada = exit 1.
+      - name: osv-scanner (lockfiles Gradle)
         run: |
-          n=$(find backend android -type f \( -name 'gradle.lockfile' -o -name 'buildscript-gradle.lockfile' -o -name 'verification-metadata.xml' \) -not -path '*/build/*' | wc -l)
-          echo "count=$n" >> "$GITHUB_OUTPUT"
-          if [ "$n" -eq 0 ]; then
-            echo "::warning title=osv-scanner::Nenhum lockfile Gradle encontrado em backend/ ou android/; nada a escanear."
+          mapfile -t locks < <(find backend android -type f -name 'gradle.lockfile' -not -path '*/build/*' | sort)
+          if [ "${#locks[@]}" -eq 0 ]; then
+            echo "::error title=osv-scanner::Nenhum gradle.lockfile em backend/ ou android/."
+            exit 1
           fi
-      - name: osv-scanner
-        if: steps.lock.outputs.count != '0'
-        run: |
-          docker run --rm -v "$PWD:/src" ghcr.io/google/osv-scanner:v2.7.1 \
-            scan source --recursive /src
+          args=()
+          for f in "${locks[@]}"; do args+=(-L "/src/$f"); done
+          docker run --rm -v "$PWD:/src:ro" ghcr.io/google/osv-scanner:v2.7.1 \
+            scan source "${args[@]}"
 
   trivy-fs:
     runs-on: ubuntu-latest

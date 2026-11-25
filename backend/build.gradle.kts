@@ -9,6 +9,12 @@ plugins {
 group = "br.malhaviva"
 version = "0.1.0"
 
+// Lockfile lido pelo osv-scanner no CI. Atualizar apos mudar dependencias:
+// .\gradlew.bat dependencies --write-locks
+dependencyLocking {
+    lockAllConfigurations()
+}
+
 kotlin {
     jvmToolchain(21)
 }
