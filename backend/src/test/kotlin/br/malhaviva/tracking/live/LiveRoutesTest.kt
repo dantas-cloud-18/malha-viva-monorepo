@@ -52,7 +52,8 @@ class LiveRoutesTest {
             val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
             assertEquals("SANTA_CRUZ_TO_CENTRAL", body["direction"]?.toString()?.trim('"'))
             val train = body["trains"]!!.jsonArray.single().jsonObject
-            assertEquals(3, train["signals"].toString().toInt())
+            assertEquals("\"low\"", train["confidence"].toString())
+            assertFalse(train.containsKey("signals"))
             assertEquals(1050.0, train["along_m"].toString().toDouble())
         }
 
@@ -104,7 +105,7 @@ class LiveRoutesTest {
     fun `TrainState nao expoe campos de usuario ou dispositivo`() {
         feed()
         val json = Json.encodeToJsonElement(TrainState.serializer(), hub.snapshot(key).single()) as JsonObject
-        val expected = setOf("id", "along_m", "speed_mps", "signals", "confidence", "updated_at_ms")
+        val expected = setOf("id", "along_m", "speed_mps", "confidence", "updated_at_ms")
         assertEquals(expected, json.keys)
         val text = json.toString()
         listOf("eph-a", "eph-b", "eph-c", "user", "device", "account").forEach { assertFalse(text.contains(it), it) }

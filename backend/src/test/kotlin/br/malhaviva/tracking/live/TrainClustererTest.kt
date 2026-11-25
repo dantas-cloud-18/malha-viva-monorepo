@@ -20,7 +20,7 @@ class TrainClustererTest {
     fun `agrupa passageiros proximos e separa trens distantes`() {
         val trains = clusterer.cluster(listOf(pos(1000.0), pos(1080.0), pos(1150.0), pos(5000.0)), now)
         assertEquals(1, trains.size, "o grupo de 1 sinal nao e publicado")
-        assertEquals(3, trains[0].signals)
+        assertEquals(ConfidenceBand.LOW, trains[0].confidence)
     }
 
     @Test
@@ -30,9 +30,19 @@ class TrainClustererTest {
     }
 
     @Test
-    fun `confianca com dois sinais e 0,5 quando k e 2`() {
+    fun `faixas de confianca nas fronteiras`() {
+        assertEquals(ConfidenceBand.LOW, ConfidenceBand.of(2))
+        assertEquals(ConfidenceBand.LOW, ConfidenceBand.of(4))
+        assertEquals(ConfidenceBand.MEDIUM, ConfidenceBand.of(5))
+        assertEquals(ConfidenceBand.MEDIUM, ConfidenceBand.of(9))
+        assertEquals(ConfidenceBand.HIGH, ConfidenceBand.of(10))
+        assertEquals(ConfidenceBand.HIGH, ConfidenceBand.of(50))
+    }
+
+    @Test
+    fun `k igual a 2 publica trem de dois`() {
         val two = TrainClusterer(minContributors = 2, newId = { "x" })
-        assertEquals(0.5, two.cluster(listOf(pos(1000.0), pos(1050.0)), now).single().confidence)
+        assertEquals(ConfidenceBand.LOW, two.cluster(listOf(pos(1000.0), pos(1050.0)), now).single().confidence)
     }
 
     @Test
@@ -59,9 +69,8 @@ class TrainClustererTest {
         val real = (0 until 7).map { pos(5000.0 + it * 10) }
         val fake = listOf(pos(5200.0), pos(5210.0), pos(5220.0))
         val train = clusterer.cluster(real + fake, now).single()
-        assertEquals(10, train.signals)
+        assertEquals(ConfidenceBand.HIGH, train.confidence)
         assertTrue(train.alongM in 4990.0..5070.0, "alongM=${train.alongM}")
-        assertEquals(0.6 + 0.4 * 0.7, train.confidence, 1e-9)
     }
 
     @Test

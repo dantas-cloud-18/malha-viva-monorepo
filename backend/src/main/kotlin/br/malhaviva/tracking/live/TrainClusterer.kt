@@ -18,10 +18,36 @@ data class TrainState(
     val id: String,
     @SerialName("along_m") val alongM: Double,
     @SerialName("speed_mps") val speedMps: Double,
-    val signals: Int,
-    val confidence: Double,
+    val confidence: ConfidenceBand,
     @SerialName("updated_at_ms") val updatedAtMs: Long,
 )
+
+/** Faixa grossa de confianca; o numero exato de contribuintes nunca sai do servidor. */
+@Serializable
+enum class ConfidenceBand {
+    @SerialName("low")
+    LOW,
+
+    @SerialName("medium")
+    MEDIUM,
+
+    @SerialName("high")
+    HIGH,
+    ;
+
+    companion object {
+        /** K..4 -> baixa, 5..9 -> media, 10 ou mais -> alta. */
+        const val MEDIUM_FROM = 5
+        const val HIGH_FROM = 10
+
+        fun of(contributors: Int): ConfidenceBand =
+            when {
+                contributors >= HIGH_FROM -> HIGH
+                contributors >= MEDIUM_FROM -> MEDIUM
+                else -> LOW
+            }
+    }
+}
 
 object ClusterPolicy {
     const val GROUP_GAP_M = 150.0
@@ -29,10 +55,6 @@ object ClusterPolicy {
     const val MAX_AGE_MS = 30_000L
     const val MIN_BAND_M = 100.0
     const val MAD_FACTOR = 3.0
-    const val CONF_ONE = 0.3
-    const val CONF_TWO = 0.5
-    const val CONF_BASE = 0.6
-    const val CONF_RANGE = 0.4
 
     /** k-anonimato: trem so e publicado com pelo menos k ids efemeros distintos (RIPD R1/R2). */
     const val DEFAULT_MIN_CONTRIBUTORS = 3
@@ -48,16 +70,6 @@ private fun median(sorted: List<Double>): Double {
     val n = sorted.size
     return if (n % 2 == 1) sorted[n / 2] else (sorted[n / 2 - 1] + sorted[n / 2]) / 2
 }
-
-private fun confidence(
-    signals: Int,
-    inlierRatio: Double,
-): Double =
-    when (signals) {
-        1 -> ClusterPolicy.CONF_ONE
-        2 -> ClusterPolicy.CONF_TWO
-        else -> ClusterPolicy.CONF_BASE + ClusterPolicy.CONF_RANGE * inlierRatio
-    }
 
 /** Agrupa posicoes ordenadas: um novo trem comeca quando o salto passa de GROUP_GAP_M. */
 private fun groupByGap(sorted: List<PassengerPosition>): List<List<PassengerPosition>> {
@@ -108,8 +120,7 @@ class TrainClusterer(
             id = "",
             alongM = median(inliers.map { it.alongM }),
             speedMps = median(inliers.map { it.speedMps }.sorted()),
-            signals = group.size,
-            confidence = confidence(group.size, inliers.size.toDouble() / group.size),
+            confidence = ConfidenceBand.of(group.size),
             updatedAtMs = group.maxOf { it.tsMs },
         )
     }

@@ -205,6 +205,6 @@ class IngestRoutesTest {
                 assertEquals(HttpStatusCode.Accepted, post(batch(samples, "epoch-$n"), tokenN = n).status)
             }
             val train = hub.snapshot(line).single()
-            assertEquals(3, train.signals)
+            assertEquals(br.malhaviva.tracking.live.ConfidenceBand.LOW, train.confidence)
         }
 }
