@@ -19,10 +19,10 @@ data class PipelineStep(
 )
 
 /**
- * Parte pura do servico: guarda as leituras da viagem so em memoria e, ao final, aplica
- * [sanitizeTrip] (corredor e corte de inicio e fim) antes de montar os lotes.
- * shortcut: nada sai durante a viagem (o corte do fim so existe com a viagem completa); mover para
- * envio com atraso se a UX pedir posicao quase em tempo real.
+ * Parte pura do servico: guarda as leituras da viagem so em memoria e aplica [sanitizeTrip] (corredor e corte de
+ * inicio e fim) antes de montar os lotes. [drain] roda durante a viagem (a cada LIVE_UPLOAD_INTERVAL_MS) e trata o
+ * instante atual como se fosse o fim: so sai o que ja esta a 300 m ou mais da posicao mais nova, entao os ultimos 300 m
+ * ficam retidos ate [finish], como antes. Cada leitura sai uma vez so (por tempo) e o seq continua crescendo.
  */
 class TripPipeline(
     private val route: Route,
@@ -30,6 +30,8 @@ class TripPipeline(
 ) {
     private val readings = mutableListOf<Reading>()
     private val stationary = StationaryDetector()
+    private val builder = BatchBuilder()
+    private var lastSentMs = Long.MIN_VALUE
     private var pausedSinceMs: Long? = null
 
     fun onReading(
@@ -48,13 +50,18 @@ class TripPipeline(
         return PipelineStep(paused, stop, nextIntervalMs(speedMs, paused, batteryLow))
     }
 
-    /** Saneia a viagem, monta os lotes e descarta as leituras brutas. */
-    fun finish(): List<SampleBatch> {
-        val builder = BatchBuilder()
+    /** Lotes das leituras que ja podem sair (fora do corte do inicio e a 300 m ou mais da mais nova). */
+    fun drain(): List<SampleBatch> = batchesOf(sanitizeTrip(readings, route))
+
+    /** Saneia a viagem inteira, monta os lotes do que falta e descarta as leituras brutas. */
+    fun finish(): List<SampleBatch> = batchesOf(sanitizeTrip(readings, route)).also { readings.clear() }
+
+    private fun batchesOf(sendable: List<Reading>): List<SampleBatch> {
+        val fresh = sendable.filter { it.timeMs > lastSentMs }
+        fresh.lastOrNull()?.let { lastSentMs = it.timeMs }
         val batches = mutableListOf<SampleBatch>()
-        sanitizeTrip(readings, route).forEach { builder.add(it)?.let(batches::add) }
+        fresh.forEach { builder.add(it)?.let(batches::add) }
         builder.flush()?.let(batches::add)
-        readings.clear()
         return batches
     }
 }

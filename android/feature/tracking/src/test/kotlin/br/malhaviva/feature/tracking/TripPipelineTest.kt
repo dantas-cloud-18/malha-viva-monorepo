@@ -39,6 +39,39 @@ class TripPipelineTest {
     }
 
     @Test
+    fun `drain sends only what is 300 m behind the newest reading, once, and finish sends the rest`() {
+        val live = TripPipeline(route, startMs = 0L)
+        val sent = mutableListOf<br.malhaviva.core.domain.sampling.Sample>()
+        (0..STEPS).forEach {
+            live.onReading(reading(it), batteryLow = false)
+            if (it % 3 == 0) {
+                val drained = live.drain().flatMap { b -> b.samples }
+                // nada a menos de 300 m da leitura mais nova (a viagem ainda pode continuar)
+                assertTrue(drained.all { s -> (LAT0 + it * DEG - s.lat) * METERS_PER_DEG >= PrivacyPolicy.TRIM_M - 1 })
+                sent += drained
+            }
+        }
+        assertTrue("drain should have sent something before the trip ended", sent.isNotEmpty())
+        sent += live.finish().flatMap { it.samples }
+        // mesmo conjunto de um envio unico no fim, sem repeticao e com seq continuo
+        val once = TripPipeline(route, startMs = 0L)
+        (0..STEPS).forEach { once.onReading(reading(it), batteryLow = false) }
+        val expected = once.finish().flatMap { it.samples }
+        assertEquals(expected.map { it.timeMs }, sent.map { it.timeMs })
+        assertEquals((0 until sent.size).toList(), sent.map { it.seq })
+    }
+
+    @Test
+    fun `drain of a short trip and a repeated drain send nothing`() {
+        val pipeline = TripPipeline(route, startMs = 0L)
+        (0..2).forEach { pipeline.onReading(reading(it), batteryLow = false) }
+        assertTrue(pipeline.drain().isEmpty())
+        (3..STEPS).forEach { pipeline.onReading(reading(it), batteryLow = false) }
+        assertTrue(pipeline.drain().isNotEmpty())
+        assertTrue(pipeline.drain().isEmpty())
+    }
+
+    @Test
     fun `batches respect the contract limit`() {
         val long = Route((0..BIG).map { GeoPoint(LAT0 + it * DEG, LON0) }, emptyList())
         val pipeline = TripPipeline(long, startMs = 0L)

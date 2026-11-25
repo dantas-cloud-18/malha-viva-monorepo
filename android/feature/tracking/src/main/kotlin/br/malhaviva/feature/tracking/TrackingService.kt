@@ -11,6 +11,7 @@ import android.os.IBinder
 import android.os.Looper
 import br.malhaviva.core.domain.checkin.GeoPoint
 import br.malhaviva.core.domain.checkin.Reading
+import br.malhaviva.core.domain.sampling.SampleBatch
 import br.malhaviva.core.domain.sampling.SamplingPolicy
 import br.malhaviva.core.domain.tracking.Route
 import br.malhaviva.core.domain.tracking.TrackPolicy
@@ -25,8 +26,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Servico em primeiro plano (tipo location) que coleta posicoes durante a viagem.
@@ -39,6 +44,10 @@ class TrackingService : Service() {
     private var intervalMs = SamplingPolicy.SLOW_INTERVAL_MS
     private var lastStatus = TripStatus.Waiting
     private var consentWatch: Job? = null
+    private var liveUpload: Job? = null
+
+    // lotes saem na ordem em que foram montados (o seq so cresce; o servidor descarta seq repetido ou menor)
+    private val uploadLock = Mutex()
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private val callback =
@@ -98,6 +107,21 @@ class TrackingService : Service() {
                     TrackingEnvironment.consent.granted.first { !it }
                     mainHandler.post { finish(StopCause.ConsentRevoked) }
                 }
+            liveUpload =
+                scope.launch {
+                    while (isActive) {
+                        delay(SamplingPolicy.LIVE_UPLOAD_INTERVAL_MS)
+                        mainHandler.post {
+                            pipeline?.drain()?.takeIf { it.isNotEmpty() }?.let {
+                                scope.launch {
+                                    uploadLock.upload(
+                                        it,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
         } else {
             abort(StopCause.PermissionDenied)
         }
@@ -106,6 +130,7 @@ class TrackingService : Service() {
     private fun abort(cause: StopCause) {
         pipeline = null
         consentWatch?.cancel()
+        liveUpload?.cancel()
         TrackingBridge.publish(ServiceEvent.Stopped(cause))
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -136,14 +161,14 @@ class TrackingService : Service() {
         }
         pipeline = null
         consentWatch?.cancel()
+        liveUpload?.cancel()
         client.removeLocationUpdates(callback)
         TrackingBridge.publish(ServiceEvent.Stopped(cause))
         // Sem consentimento nada sai do aparelho: o lote pendente e descartado.
         val batches = if (cause == StopCause.ConsentRevoked) emptyList() else current.finish()
-        val uploader = TrackingEnvironment.uploader
         // o servico fica em primeiro plano ate o envio terminar; lote que falha e descartado
         scope.launch {
-            batches.forEach { runCatching { uploader.upload(it) } }
+            uploadLock.upload(batches)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
@@ -171,6 +196,12 @@ class TrackingService : Service() {
     }
 }
 
+/** Envia na ordem do lock; lote que falha e descartado (posicao velha nao serve ao ao-vivo). */
+private suspend fun Mutex.upload(batches: List<SampleBatch>) {
+    val uploader = TrackingEnvironment.uploader
+    withLock { batches.forEach { runCatching { uploader.upload(it) } } }
+}
+
 /** Amostra de localizacao simulada nao entra: API 31+ usa isMock; antes, isFromMockProvider. */
 internal fun Location.isMockLocation(): Boolean =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -186,4 +217,5 @@ internal fun Location.toReading(): Reading =
         accuracyM = if (hasAccuracy()) accuracy else Float.MAX_VALUE,
         speedKmh = if (hasSpeed()) speed * TrackPolicy.KMH_TO_MS.toFloat() else 0f,
         timeMs = time,
+        bearingDeg = if (hasBearing()) bearing else null,
     )

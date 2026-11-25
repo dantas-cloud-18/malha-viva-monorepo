@@ -115,13 +115,15 @@ class HttpBatchUploader(
     }
 }
 
+private const val FULL_TURN_DEG = 360f
+
 internal fun SampleBatch.toJson(
     anonEpochId: String,
     corridor: String,
 ): String {
     val array = JSONArray()
     samples.forEach {
-        array.put(
+        val sample =
             JSONObject()
                 .put("seq", it.seq)
                 .put("ts", Instant.ofEpochMilli(it.timeMs).toString())
@@ -129,8 +131,13 @@ internal fun SampleBatch.toJson(
                 .put("lon", it.lon)
                 .put("accuracy_m", it.accuracyM.toDouble())
                 .put("speed_mps", it.speedMs)
-                .put("mock_location", false),
-        )
+                .put("mock_location", false)
+        // contrato: 0 <= bearing_deg < 360; valor fora disso nao e enviado
+        it.bearingDeg
+            ?.takeIf { b ->
+                b >= 0f && b < FULL_TURN_DEG
+            }?.let { b -> sample.put("bearing_deg", b.toDouble()) }
+        array.put(sample)
     }
     return JSONObject()
         .put("anon_epoch_id", anonEpochId)

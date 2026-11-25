@@ -14,6 +14,8 @@ data class Reading(
     val accuracyM: Float,
     val speedKmh: Float,
     val timeMs: Long,
+    /** Rumo do GPS (0 a 360, exclusivo), quando o aparelho informa; so vale em movimento. */
+    val bearingDeg: Float? = null,
 )
 
 data class Station(

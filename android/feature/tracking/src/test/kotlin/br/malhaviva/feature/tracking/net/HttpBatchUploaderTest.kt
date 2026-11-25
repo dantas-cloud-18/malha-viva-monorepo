@@ -63,6 +63,19 @@ class HttpBatchUploaderTest {
     }
 
     @Test
+    fun `bearing goes in the batch only when inside the contract range`() {
+        fun json(bearing: Float?) =
+            SampleBatch(listOf(Sample(0, now, -22.9, -43.2, 5f, 10.0, bearing))).toJson("e", "c")
+
+        fun has(bearing: Float?) = JSONObject(json(bearing)).getJSONArray("samples").getJSONObject(0).has("bearing_deg")
+        assertTrue(has(90f))
+        assertTrue(has(0f))
+        assertTrue(!has(null))
+        assertTrue(!has(360f))
+        assertTrue(!has(-1f))
+    }
+
+    @Test
     fun `sends token request then signed batch and returns true on 202`() =
         runTest {
             val http = FakeTransport({ iso(now + 6 * 3_600_000L) })

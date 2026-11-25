@@ -11,6 +11,7 @@ data class Sample(
     val lon: Double,
     val accuracyM: Float,
     val speedMs: Double,
+    val bearingDeg: Float? = null,
 )
 
 data class SampleBatch(
@@ -35,6 +36,7 @@ class BatchBuilder {
                 lon = r.point.lon,
                 accuracyM = r.accuracyM,
                 speedMs = r.speedKmh / TrackPolicy.KMH_TO_MS,
+                bearingDeg = r.bearingDeg,
             )
         return if (pending.size >= MAX_BATCH_SIZE) flush() else null
     }
