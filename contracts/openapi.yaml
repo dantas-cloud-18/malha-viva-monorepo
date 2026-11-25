@@ -1121,8 +1121,10 @@ components:
         age_bracket: { $ref: "#/components/schemas/AgeBracket" }
         status: { $ref: "#/components/schemas/AccountStatus" }
         gender:
-          allOf: [{ $ref: "#/components/schemas/Gender" }]
-          description: Ausente quando não informado.
+          description: "`null` quando não informado."
+          oneOf:
+            - { $ref: "#/components/schemas/Gender" }
+            - { type: "null" }
         contacts_verified:
           type: object
           required: [phone, email]
