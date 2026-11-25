@@ -72,6 +72,6 @@ class SseParser {
     }
 
     private companion object {
-        const val BOM = '﻿'
+        const val BOM = '\uFEFF'
     }
 }
