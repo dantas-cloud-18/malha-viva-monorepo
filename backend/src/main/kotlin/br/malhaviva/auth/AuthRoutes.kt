@@ -38,6 +38,8 @@ private class CreateAccountDto(
     // autodeclarada (LGPD art. 14): so a faixa etaria e guardada, nunca a data
     @SerialName("birth_date") val birthDate: String? = null,
     val guardian: GuardianDto? = null,
+    // opcional: so estatistica agregada anonima; ausente = nao informado
+    val gender: String? = null,
 )
 
 @Serializable
@@ -52,6 +54,7 @@ private class AccountDto(
     @SerialName("contacts_verified") val contactsVerified: ContactsVerified,
     @SerialName("age_bracket") val ageBracket: String,
     val status: String,
+    val gender: String? = null,
 )
 
 @Serializable
@@ -108,7 +111,13 @@ private suspend fun signupRoute(
     if (!c.limiters.signup.tryAcquire("ip:${call.clientIp()}", c.clock())) {
         call.throttled()
     } else {
-        call.withBody<CreateAccountDto> { dto -> respondSignup(call, c, dto) }
+        call.withBody<CreateAccountDto> { dto ->
+            if (dto?.gender != null && Gender.fromWire(dto.gender) == null) {
+                call.problem(HttpStatusCode.BadRequest, "Invalid gender", "invalid_gender")
+            } else {
+                respondSignup(call, c, dto)
+            }
+        }
     }
 }
 
@@ -154,9 +163,9 @@ private suspend fun registerAccount(
     age: SignupAge.Ok?,
 ) {
     val bracket = age?.bracket ?: AgeBracket.ADULT
-    val result = c.auth.register(dto.handle, dto.password, bracket)
+    val result = c.auth.register(dto.handle, dto.password, bracket, Gender.fromWire(dto.gender))
     if (result == RegisterResult.Created) afterSignup(c, dto, age, call.clientIp())
-    respondRegister(call, result, dto.handle, bracket)
+    respondRegister(call, result, dto.handle, bracket, Gender.fromWire(dto.gender))
 }
 
 /** Contatos do cadastro, registro de acesso e, para menor de 12, o OTP ao responsavel. */
@@ -178,12 +187,16 @@ private suspend fun respondRegister(
     result: RegisterResult,
     handle: String,
     bracket: AgeBracket,
+    gender: Gender?,
 ) {
     when (result) {
         RegisterResult.Created -> {
             val minor = bracket == AgeBracket.UNDER_12
             val status = if (minor) AccountStatus.PENDING_PARENTAL_CONSENT else AccountStatus.ACTIVE
-            call.respond(HttpStatusCode.Created, AccountDto(handle, ContactsVerified(), bracket.wire, status.wire))
+            call.respond(
+                HttpStatusCode.Created,
+                AccountDto(handle, ContactsVerified(), bracket.wire, status.wire, gender?.wire),
+            )
         }
         RegisterResult.InvalidHandle -> call.problem(HttpStatusCode.BadRequest, "Invalid handle", "invalid_handle")
         RegisterResult.HandleTaken -> call.problem(HttpStatusCode.Conflict, "Handle unavailable")

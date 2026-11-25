@@ -7,9 +7,9 @@ import java.util.UUID
 import javax.sql.DataSource
 
 private const val INSERT_ACCOUNT =
-    "INSERT INTO accounts (handle, password_hash, age_bracket, status) VALUES (?, ?, ?, ?) " +
+    "INSERT INTO accounts (handle, password_hash, age_bracket, status, gender) VALUES (?, ?, ?, ?, NULLIF(?, '')) " +
         "ON CONFLICT DO NOTHING RETURNING account_id"
-private const val ACCOUNT_COLUMNS = "account_id, handle, password_hash, role, age_bracket, status"
+private const val ACCOUNT_COLUMNS = "account_id, handle, password_hash, role, age_bracket, status, gender"
 
 private fun ResultSet.toAccount() =
     AccountRecord(
@@ -19,6 +19,7 @@ private fun ResultSet.toAccount() =
         getString("role"),
         AgeBracket.fromWire(getString("age_bracket")),
         AccountStatus.fromWire(getString("status")),
+        Gender.fromWire(getString("gender")),
     )
 
 class JdbcAccountRepository(
@@ -28,12 +29,20 @@ class JdbcAccountRepository(
         handle: String,
         passwordHash: String,
         ageBracket: AgeBracket,
+        gender: Gender?,
     ): UUID? {
         val status =
             if (ageBracket == AgeBracket.UNDER_12) AccountStatus.PENDING_PARENTAL_CONSENT else AccountStatus.ACTIVE
         return dataSource
             .read {
-                it.queryList(INSERT_ACCOUNT, handle, passwordHash, ageBracket.wire, status.wire) { rs ->
+                it.queryList(
+                    INSERT_ACCOUNT,
+                    handle,
+                    passwordHash,
+                    ageBracket.wire,
+                    status.wire,
+                    gender?.wire.orEmpty(),
+                ) { rs ->
                     rs.uuid("account_id")
                 }
             }.firstOrNull()

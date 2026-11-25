@@ -1,6 +1,7 @@
 package br.malhaviva.lgpd
 
 import br.malhaviva.auth.AccountRepository
+import br.malhaviva.auth.Gender
 import br.malhaviva.auth.PasswordHasher
 import br.malhaviva.auth.exists
 import br.malhaviva.auth.isValidHandle
@@ -125,6 +126,20 @@ class DataRightsService(
             }
         }
 
+    /** Define ou apaga ([gender] null) o genero opcional; nao reabre conta excluida. */
+    fun setGender(
+        accountId: UUID,
+        gender: Gender?,
+    ) {
+        dataSource.read {
+            it.update(
+                "UPDATE accounts SET gender = NULLIF(?, '') WHERE account_id = ? AND status <> 'deleted'",
+                gender?.wire.orEmpty(),
+                accountId,
+            )
+        }
+    }
+
     fun passwordMatches(
         accountId: UUID,
         password: String?,
@@ -150,8 +165,8 @@ class DataRightsService(
             c.update(
                 "UPDATE accounts SET handle = '@del_' || substr(md5(random()::text || account_id::text), 1, 12), " +
                     "password_hash = '!', phone_e164 = NULL, email = NULL, phone_verified_at = NULL, " +
-                    "email_verified_at = NULL, role = 'user', admin_enroll_hash = NULL, status = 'deleted', " +
-                    "deleted_at = ? WHERE account_id = ? AND status <> 'deleted'",
+                    "email_verified_at = NULL, role = 'user', admin_enroll_hash = NULL, gender = NULL, " +
+                    "status = 'deleted', deleted_at = ? WHERE account_id = ? AND status <> 'deleted'",
                 now(),
                 accountId,
             )

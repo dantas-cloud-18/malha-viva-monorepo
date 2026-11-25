@@ -19,7 +19,7 @@ private fun ResultSet.str(column: String): JsonElement = getString(column)?.let 
 /** Cadastro e contatos da conta (nunca hash de senha, papel ou segredo de admin). */
 internal fun Connection.exportAccount(accountId: UUID): Pair<JsonObject, JsonObject> =
     queryList(
-        "SELECT account_id, handle, created_at, age_bracket, status, phone_e164, phone_verified_at, " +
+        "SELECT account_id, handle, created_at, age_bracket, status, gender, phone_e164, phone_verified_at, " +
             "email, email_verified_at FROM accounts WHERE account_id = ?",
         accountId,
     ) { rs ->
@@ -29,6 +29,7 @@ internal fun Connection.exportAccount(accountId: UUID): Pair<JsonObject, JsonObj
             put("created_at", rs.ts("created_at"))
             put("age_bracket", rs.getString("age_bracket"))
             put("status", rs.getString("status"))
+            put("gender", rs.str("gender"))
         } to
             buildJsonObject {
                 put("phone", rs.str("phone_e164"))

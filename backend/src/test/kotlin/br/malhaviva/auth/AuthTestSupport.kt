@@ -48,11 +48,15 @@ class InMemoryAccountRepository : AccountRepository {
         handle: String,
         passwordHash: String,
         ageBracket: AgeBracket,
+        gender: Gender?,
     ): UUID? =
         if (rows.values.any { it.handle.equals(handle, ignoreCase = true) }) {
             null
         } else {
-            UUID.randomUUID().also { rows[it] = AccountRecord(it, handle, passwordHash, ageBracket = ageBracket) }
+            UUID.randomUUID().also {
+                rows[it] =
+                    AccountRecord(it, handle, passwordHash, ageBracket = ageBracket, gender = gender)
+            }
         }
 
     @Synchronized

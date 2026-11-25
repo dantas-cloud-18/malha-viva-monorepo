@@ -75,6 +75,7 @@ class AuthService(
         handle: String,
         password: String,
         ageBracket: AgeBracket = AgeBracket.ADULT,
+        gender: Gender? = null,
     ): RegisterResult =
         if (!isValidHandle(handle)) {
             RegisterResult.InvalidHandle
@@ -82,7 +83,7 @@ class AuthService(
             when (val checked = policy.check(password, listOf(handle.removePrefix("@")))) {
                 is PolicyResult.Rejected -> RegisterResult.PasswordRejected(checked.reason)
                 is PolicyResult.Accepted ->
-                    if (accounts.create(handle, hasher.hash(checked.normalized), ageBracket) != null) {
+                    if (accounts.create(handle, hasher.hash(checked.normalized), ageBracket, gender) != null) {
                         RegisterResult.Created
                     } else {
                         RegisterResult.HandleTaken

@@ -20,6 +20,21 @@ enum class AgeBracket(
     }
 }
 
+/** Genero autodeclarado e opcional (ausente = nao informado), so para estatistica agregada anonima. */
+enum class Gender(
+    val wire: String,
+) {
+    MALE("male"),
+    FEMALE("female"),
+    NON_BINARY("non_binary"),
+    PREFER_NOT_TO_SAY("prefer_not_to_say"),
+    ;
+
+    companion object {
+        fun fromWire(value: String?): Gender? = entries.firstOrNull { it.wire == value }
+    }
+}
+
 enum class AccountStatus(
     val wire: String,
 ) {
@@ -40,6 +55,7 @@ data class AccountRecord(
     val role: String = ROLE_USER,
     val ageBracket: AgeBracket = AgeBracket.ADULT,
     val status: AccountStatus = AccountStatus.ACTIVE,
+    val gender: Gender? = null,
 )
 
 interface AccountRepository {
@@ -51,6 +67,7 @@ interface AccountRepository {
         handle: String,
         passwordHash: String,
         ageBracket: AgeBracket = AgeBracket.ADULT,
+        gender: Gender? = null,
     ): UUID?
 
     fun findByHandle(handle: String): AccountRecord?

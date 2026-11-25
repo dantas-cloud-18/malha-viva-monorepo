@@ -19,6 +19,7 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.ApplicationTestBuilder
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -268,6 +269,48 @@ class LgpdRoutesTest : PostgresIntegrationTest() {
         }
 
     @Test
+    fun `gender is optional at signup and absent means not informed`() =
+        authApp(LgpdEnv(ds).components) {
+            val none = signup("@sem_gen_1", ADULT_BIRTH)
+            assertEquals(HttpStatusCode.Created, none.status)
+            assertTrue(none.json().getValue("gender") is JsonNull)
+            val chosen = signup("@com_gen_1", ADULT_BIRTH, ""","gender":"non_binary"""")
+            assertEquals("non_binary", chosen.json().text("gender"))
+            assertEquals("non_binary", httpGet("/me", login("@com_gen_1")).json().text("gender"))
+            assertTrue(httpGet("/me", login("@sem_gen_1")).json().getValue("gender") is JsonNull)
+            val bad = signup("@mau_gen_01", ADULT_BIRTH, ""","gender":"outro"""")
+            assertEquals(HttpStatusCode.BadRequest, bad.status)
+            assertEquals("invalid_gender", bad.json().text("detail"))
+            assertEquals(0L, scalars("SELECT count(*) FROM accounts WHERE handle = '@mau_gen_01'").single())
+        }
+
+    @Test
+    fun `patch sets, keeps and clears gender and validates it`() =
+        authApp(LgpdEnv(ds).components) {
+            val token = adultToken("@patch_gen1")
+            val set = send(HttpMethod.Patch, "/me", token, """{"gender":"prefer_not_to_say"}""")
+            assertEquals("prefer_not_to_say", set.json().text("gender"))
+            // so o handle: nao mexe no genero
+            val kept = send(HttpMethod.Patch, "/me", token, """{"handle":"@patch_gen2"}""")
+            assertEquals("prefer_not_to_say", kept.json().text("gender"))
+            assertEquals(
+                "prefer_not_to_say",
+                httpGet("/me/export", token)
+                    .json()
+                    .getValue("account")
+                    .jsonObject
+                    .text("gender"),
+            )
+            val cleared = send(HttpMethod.Patch, "/me", token, """{"gender":null}""")
+            assertEquals(HttpStatusCode.OK, cleared.status)
+            assertTrue(cleared.json().getValue("gender") is JsonNull)
+            assertNull(scalars("SELECT gender FROM accounts WHERE handle = '@patch_gen2'").single())
+            val bad = send(HttpMethod.Patch, "/me", token, """{"gender":"x"}""")
+            assertEquals("invalid_gender", bad.json().text("detail"))
+            assertEquals(HttpStatusCode.BadRequest, send(HttpMethod.Patch, "/me", token, """{"gender":7}""").status)
+        }
+
+    @Test
     fun `patch corrects the handle and refuses taken or malformed ones`() =
         authApp(LgpdEnv(ds).components) {
             val token = adultToken("@corrige_1")
@@ -295,6 +338,7 @@ class LgpdRoutesTest : PostgresIntegrationTest() {
         }
 
     private fun seedPersonalRows(id: Any) {
+        scalars("UPDATE accounts SET gender = 'female' WHERE account_id = ?", id)
         scalars("UPDATE accounts SET phone_e164 = '+5521977770000', email = 'a@b.test' WHERE account_id = ?", id)
         scalars("INSERT INTO totp_secrets (account_id, secret_enc, enabled_at) VALUES (?, '\\x00', now())", id)
         scalars("INSERT INTO totp_backup_codes (account_id, code_hmac) VALUES (?, 'x')", id)
@@ -353,6 +397,7 @@ class LgpdRoutesTest : PostgresIntegrationTest() {
                 assertEquals(0L, scalars("SELECT count(*) FROM $table WHERE account_id = ?", id).single(), table)
             }
             assertTrue(scalars("SELECT count(*) FROM access_logs WHERE account_id = ?", id).single() as Long > 0)
+            assertNull(scalars("SELECT gender FROM accounts WHERE account_id = ?", id).single(), "genero apagado")
 
             val row =
                 scalars("SELECT handle || '|' || password_hash || '|' || status FROM accounts WHERE account_id = ?", id)

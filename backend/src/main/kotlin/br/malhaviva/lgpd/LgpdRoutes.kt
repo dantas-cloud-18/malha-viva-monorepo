@@ -2,6 +2,7 @@ package br.malhaviva.lgpd
 
 import br.malhaviva.auth.AccountRepository
 import br.malhaviva.auth.AuthComponents
+import br.malhaviva.auth.Gender
 import br.malhaviva.auth.problem
 import br.malhaviva.auth.recovery.ContactRepository
 import br.malhaviva.auth.sensitiveAccountIdOrUnauthorized
@@ -22,7 +23,12 @@ import io.ktor.server.routing.put
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 import java.util.UUID
 
@@ -54,11 +60,6 @@ private class ResendParentalDto(
 @Serializable
 private class GrantDto(
     @SerialName("policy_version") val policyVersion: String,
-)
-
-@Serializable
-private class PatchMeDto(
-    val handle: String? = null,
 )
 
 @Serializable
@@ -209,16 +210,43 @@ private suspend fun patchMe(
     l: LgpdComponents,
 ) {
     val id = call.sensitiveAccountIdOrUnauthorized(c) ?: return
-    call.withBody<PatchMeDto> { dto ->
-        val handle = dto?.handle
-        if (handle == null) {
+    call.withBody<JsonObject> { body -> patchBody(call, l, id, body) }
+}
+
+/** Corpo lido como JsonObject: `gender: null` (apagar) precisa ser distinto de `gender` ausente (nao mexe). */
+private suspend fun patchBody(
+    call: RoutingCall,
+    l: LgpdComponents,
+    id: UUID,
+    body: JsonObject?,
+) {
+    val handle = body?.get("handle")
+    val gender = body?.get("gender")
+    val handleText = (handle as? JsonPrimitive)?.takeIf { it.isString }?.content
+    val genderValue = Gender.fromWire((gender as? JsonPrimitive)?.takeIf { it.isString }?.content)
+    when {
+        body == null || (handle == null && gender == null) || (handle != null && handleText == null) ->
             call.problem(HttpStatusCode.BadRequest, "Malformed request")
-        } else {
-            when (l.rights.rename(id, handle)) {
-                RenameResult.Invalid -> call.problem(HttpStatusCode.BadRequest, "Invalid handle", "invalid_handle")
-                RenameResult.Taken -> call.problem(HttpStatusCode.Conflict, "Handle unavailable")
-                RenameResult.Done -> respondAccount(call, l, id)
-            }
+        gender != null && gender !is JsonNull && genderValue == null ->
+            call.problem(HttpStatusCode.BadRequest, "Invalid gender", "invalid_gender")
+        else -> applyPatch(call, l, id, handleText, gender)
+    }
+}
+
+private suspend fun applyPatch(
+    call: RoutingCall,
+    l: LgpdComponents,
+    id: UUID,
+    handle: String?,
+    gender: JsonElement?,
+) {
+    when (handle?.let { l.rights.rename(id, it) } ?: RenameResult.Done) {
+        RenameResult.Invalid -> call.problem(HttpStatusCode.BadRequest, "Invalid handle", "invalid_handle")
+        RenameResult.Taken -> call.problem(HttpStatusCode.Conflict, "Handle unavailable")
+        RenameResult.Done -> {
+            // null (JSON) apaga; chave ausente nao mexe
+            if (gender != null) l.rights.setGender(id, Gender.fromWire((gender as? JsonPrimitive)?.contentOrNull))
+            respondAccount(call, l, id)
         }
     }
 }
@@ -242,6 +270,7 @@ private suspend fun respondAccount(
             )
             put("age_bracket", account?.ageBracket?.wire.orEmpty())
             put("status", account?.status?.wire.orEmpty())
+            put("gender", account?.gender?.wire)
         },
     )
 }
