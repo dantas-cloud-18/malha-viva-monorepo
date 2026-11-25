@@ -60,15 +60,17 @@ fun AppRoot(
     server: ApiBaseUrlStore,
 ) {
     val session by sessionState.collectAsState()
+    var showServer by rememberSaveable { mutableStateOf(false) }
+    if (showServer) ServerDialog(server) { showServer = false }
     LaunchedEffect(session) {
         if (session == SessionState.LoggedOut && auth.state.value.screen in SESSION_SCREENS) {
             auth.act(AuthIntent.SessionLost)
         }
     }
     if (session == SessionState.LoggedIn) {
-        MainShell(auth, flows, tracking, trains, server)
+        MainShell(auth, flows, tracking, trains) { showServer = true }
     } else {
-        AuthEntry(auth, flows, Modifier.systemBarsPadding())
+        AuthEntry(auth, flows, Modifier.systemBarsPadding(), onTitleLongPress = { showServer = true })
     }
 }
 
@@ -78,10 +80,8 @@ private fun MainShell(
     flows: AuthFlows,
     tracking: TrackingViewModel,
     trains: TrainsViewModel,
-    server: ApiBaseUrlStore,
+    onServerSettings: () -> Unit,
 ) {
-    var showServer by rememberSaveable { mutableStateOf(false) }
-    if (showServer) ServerDialog(server) { showServer = false }
     var selected by rememberSaveable { mutableIntStateOf(Tab.Trains.ordinal) }
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -103,10 +103,7 @@ private fun MainShell(
                 Tab.Trains -> TrainsScreen(trains, Modifier.statusBarsPadding())
                 Tab.Trip -> TrackingScreen(tracking, Modifier.statusBarsPadding())
                 Tab.Account ->
-                    AuthEntry(auth, flows, Modifier.statusBarsPadding(), onTitleLongPress = {
-                        showServer =
-                            true
-                    })
+                    AuthEntry(auth, flows, Modifier.statusBarsPadding(), onTitleLongPress = onServerSettings)
                 Tab.Catalog -> CatalogScreen()
             }
         }

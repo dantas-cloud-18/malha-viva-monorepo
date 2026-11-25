@@ -56,9 +56,9 @@ fun AuthContent(
             verticalArrangement = Arrangement.spacedBy(MalhaVivaSpacing.m),
         ) {
             when (state.screen) {
-                AuthScreen.Login -> LoginForm(state, onIntent)
+                AuthScreen.Login -> LoginForm(state, onIntent, onTitleLongPress)
                 AuthScreen.Mfa -> MfaForm(state, onIntent)
-                AuthScreen.Signup -> SignupForm(state, onIntent)
+                AuthScreen.Signup -> SignupForm(state, onIntent, onTitleLongPress)
                 AuthScreen.EnrollmentOnly -> TotpFlow(flows.totp, enrollOnly = true, onMain = onIntent)
                 AuthScreen.Devices -> DevicesList(state, onIntent, onTitleLongPress)
                 AuthScreen.Recovery -> RecoveryFlow(flows.recovery, state.handle, onIntent)

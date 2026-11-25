@@ -21,6 +21,10 @@ import br.malhaviva.core.designsystem.CheckInButton
 import br.malhaviva.core.designsystem.MalhaVivaSpacing
 import br.malhaviva.core.designsystem.MalhaVivaTheme
 
+// Entrada oculta (piloto): pressionar o titulo abre o dialogo do servidor.
+internal fun Modifier.serverLongPress(onLongPress: (() -> Unit)?): Modifier =
+    if (onLongPress == null) this else combinedClickable(onClick = {}, onLongClick = onLongPress)
+
 @Composable
 internal fun Title(
     text: String,
@@ -54,8 +58,9 @@ internal fun Hint(text: String) =
 internal fun LoginForm(
     state: AuthState,
     onIntent: (AuthIntent) -> Unit,
+    onTitleLongPress: (() -> Unit)? = null,
 ) {
-    Title(stringResource(R.string.auth_login_title))
+    Title(stringResource(R.string.auth_login_title), Modifier.serverLongPress(onTitleLongPress))
     Field(stringResource(R.string.auth_handle_label), state.handle, { onIntent(AuthIntent.HandleChanged(it)) })
     Field(stringResource(R.string.auth_password_label), state.password, {
         onIntent(AuthIntent.PasswordChanged(it))
@@ -72,8 +77,9 @@ internal fun LoginForm(
 internal fun SignupForm(
     state: AuthState,
     onIntent: (AuthIntent) -> Unit,
+    onTitleLongPress: (() -> Unit)? = null,
 ) {
-    Title(stringResource(R.string.auth_signup_title))
+    Title(stringResource(R.string.auth_signup_title), Modifier.serverLongPress(onTitleLongPress))
     Field(stringResource(R.string.auth_handle_label), state.handle, { onIntent(AuthIntent.HandleChanged(it)) })
     Hint(stringResource(R.string.auth_signup_handle_hint))
     Field(stringResource(R.string.auth_password_label), state.password, {
