@@ -73,6 +73,8 @@ data class LineStation(
 data class LineNetwork(
     val stations: List<LineStation>,
     val lengthM: Double,
+    /** Geometria geografica para o mapa; ausente se a malha nao trouxe plataformas/trechos. */
+    val shape: LineShape? = null,
 )
 
 /** Limites PROPOSTOS; calibrar com o ritmo real de eventos do servidor. */

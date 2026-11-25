@@ -4,7 +4,6 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,6 +21,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,7 +37,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import br.malhaviva.core.designsystem.CheckInButton
 import br.malhaviva.core.designsystem.ConfidenceRing
 import br.malhaviva.core.designsystem.EmptyState
-import br.malhaviva.core.designsystem.LineHeader
 import br.malhaviva.core.designsystem.LineTimeline
 import br.malhaviva.core.designsystem.MalhaVivaSpacing
 import br.malhaviva.core.designsystem.MalhaVivaTheme
@@ -98,21 +96,19 @@ fun TrainsContent(
     onCancelCheckIn: () -> Unit = {},
 ) {
     val views = remember(state) { state.views() }
-    val health = lineHealth(state, views)
+    var showMap by rememberSaveable { mutableStateOf(true) }
+    val line = state.line
+    if (showMap && line != null) {
+        Column(modifier.fillMaxWidth()) {
+            ViewToggle(showMap) { showMap = it }
+            TrainsHeader(state, views, onDirection)
+            TrainsMap(line, views, Modifier.fillMaxWidth().weight(1f))
+        }
+        return
+    }
     Column(modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
-        LineHeader(
-            line = stringResource(R.string.trains_line_name),
-            direction = directionLabel(state.direction),
-            status = health.status,
-            statusLabel = healthLabel(health),
-        )
-        DirectionChips(state.direction, onDirection)
-        RefreshIndicator(
-            refreshing = state.link == Link.Connecting || state.link == Link.Reconnecting,
-            label = refreshLabel(state),
-            modifier = Modifier.padding(horizontal = MalhaVivaSpacing.l, vertical = MalhaVivaSpacing.s),
-        )
-        val line = state.line
+        ViewToggle(showMap) { showMap = it }
+        TrainsHeader(state, views, onDirection)
         when {
             line != null -> LineContent(state, line, views, onCheckIn, onCancelCheckIn)
             state.networkError -> NetworkError(onRetry)
@@ -133,25 +129,6 @@ private fun NetworkError(onRetry: () -> Unit) {
         message = stringResource(R.string.trains_network_error_message),
         action = { CheckInButton(stringResource(R.string.trains_network_error_retry), onRetry) },
     )
-}
-
-@Composable
-private fun DirectionChips(
-    selected: Direction,
-    onSelect: (Direction) -> Unit,
-) {
-    Row(
-        Modifier.padding(horizontal = MalhaVivaSpacing.l),
-        horizontalArrangement = Arrangement.spacedBy(MalhaVivaSpacing.s),
-    ) {
-        Direction.entries.forEach { direction ->
-            FilterChip(
-                selected = direction == selected,
-                onClick = { onSelect(direction) },
-                label = { Text(shortDirectionLabel(direction)) },
-            )
-        }
-    }
 }
 
 @Composable

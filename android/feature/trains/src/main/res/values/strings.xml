@@ -27,6 +27,9 @@
     <string name="trains_network_error_retry">Tentar agora</string>
     <string name="trains_loading">Carregando a linha…</string>
 
+    <string name="trains_view_list">Lista</string>
+    <string name="trains_view_map">Mapa</string>
+    <string name="trains_map_unavailable">Mapa indisponível para esta linha.</string>
     <string name="trains_eta_now">agora</string>
     <string name="trains_eta_minutes">~%1$d min</string>
     <string name="trains_eta_none">—</string>

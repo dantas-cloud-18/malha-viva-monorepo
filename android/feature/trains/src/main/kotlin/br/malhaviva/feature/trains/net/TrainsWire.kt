@@ -50,6 +50,7 @@ object TrainsWire {
                 LineNetwork(
                     stations = r.stationsAlong.map { (s, along) -> LineStation(s.id, names[s.id] ?: s.id, along) },
                     lengthM = r.lengthM,
+                    shape = ShapeWire.parse(json),
                 )
             }
         } catch (_: JSONException) {
