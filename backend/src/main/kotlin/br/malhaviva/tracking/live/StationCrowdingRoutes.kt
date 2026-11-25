@@ -12,6 +12,7 @@ fun Route.crowdingRoutes(
     stations: (String) -> List<StationRef>?,
     estimator: StationCrowdingEstimator = StationCrowdingEstimator(),
     smoother: StationCrowdingSmoother = StationCrowdingSmoother(),
+    checkins: StationCheckins = StationCheckins(),
 ) {
     get("/corridors/{corridor}/stations/crowding") {
         val key = lineKey(call.parameters["corridor"], call.request.queryParameters["direction"])
@@ -23,7 +24,11 @@ fun Route.crowdingRoutes(
                 val status = HttpStatusCode.NotFound
                 call.respond(status, Problem("about:blank", "Unknown corridor", status.value))
             } else {
-                val crowding = smoother.publish(key, estimator.counts(hub.freshPositions(key), refs))
+                val crowding =
+                    smoother.publish(
+                        key,
+                        estimator.counts(hub.freshPositions(key), refs, checkins.counts(key)),
+                    )
                 call.respond(StationCrowdingSnapshot(key.corridor, key.direction, crowding))
             }
         }

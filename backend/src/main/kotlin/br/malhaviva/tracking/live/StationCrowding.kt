@@ -96,15 +96,21 @@ class StationCrowdingEstimator(
 ) {
     /**
      * [positions] vem do LiveHub: uma por id efemero de viagem, entao cada viagem conta uma vez por estacao.
-     * Conta so as paradas (velocidade baixa) dentro do raio da estacao.
+     * Conta so as paradas (velocidade baixa) dentro do raio da estacao, mais os check-ins vivos da estacao
+     * ([checkins]: estacao -> quantidade de ids distintos).
+     * shortcut: a mesma pessoa pode estar nas duas fontes e nao da para deduplicar sem ligar o id do check-in ao
+     * da viagem, o que quebraria o anonimato; pode contar ate 2x. upgrade: so com nova base legal.
      */
     fun counts(
         positions: Collection<PassengerPosition>,
         stations: List<StationRef>,
+        checkins: Map<String, Int> = emptyMap(),
     ): List<Pair<String, Int>> {
         val dwelling = positions.filter { it.speedMps <= CrowdingPolicy.DWELL_MAX_SPEED_MPS }
         return stations.map { s ->
-            s.id to dwelling.count { abs(it.alongM - s.alongM) <= CrowdingPolicy.STATION_RADIUS_M }
+            s.id to
+                dwelling.count { abs(it.alongM - s.alongM) <= CrowdingPolicy.STATION_RADIUS_M } +
+                (checkins[s.id] ?: 0)
         }
     }
 
@@ -112,8 +118,9 @@ class StationCrowdingEstimator(
     fun estimate(
         positions: Collection<PassengerPosition>,
         stations: List<StationRef>,
+        checkins: Map<String, Int> = emptyMap(),
     ): List<StationCrowding> =
-        counts(positions, stations).map { (id, n) ->
+        counts(positions, stations, checkins).map { (id, n) ->
             StationCrowding(id, if (n >= minContributors) CrowdingLevel.of(n) else null)
         }
 }

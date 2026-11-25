@@ -23,10 +23,12 @@ import br.malhaviva.tracking.ingest.tokenRoutes
 import br.malhaviva.tracking.live.ClusterPolicy
 import br.malhaviva.tracking.live.CrowdingPolicy
 import br.malhaviva.tracking.live.LiveHub
+import br.malhaviva.tracking.live.StationCheckins
 import br.malhaviva.tracking.live.StationCrowdingEstimator
 import br.malhaviva.tracking.live.StationCrowdingSmoother
 import br.malhaviva.tracking.live.StationRef
 import br.malhaviva.tracking.live.TrainClusterer
+import br.malhaviva.tracking.live.checkinRoutes
 import br.malhaviva.tracking.live.crowdingRoutes
 import br.malhaviva.tracking.live.liveRoutes
 import io.ktor.http.HttpStatusCode
@@ -100,12 +102,18 @@ fun Application.module(
             networkRoutes(network)
             liveRoutes(liveHub)
             val minK = CrowdingPolicy.minContributorsFromEnv(System::getenv)
+            val stationRefs = { c: String ->
+                network.find(c)?.stations?.map { StationRef(it.stationId, it.km * METERS_PER_KM) }
+            }
+            val checkins = StationCheckins()
             crowdingRoutes(
                 liveHub,
-                { c -> network.find(c)?.stations?.map { StationRef(it.stationId, it.km * METERS_PER_KM) } },
+                stationRefs,
                 StationCrowdingEstimator(minK),
                 StationCrowdingSmoother(minK),
+                checkins,
             )
+            checkinRoutes(checkins, stationRefs)
             ingestRoutes(BatchIngestor(tokens, geometry, liveHub))
             tokenRoutes(TokenIssuer(tokens), integrity)
             auth?.let { authRoutes(it) }
