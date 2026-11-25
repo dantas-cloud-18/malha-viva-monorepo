@@ -101,6 +101,7 @@ private fun AddContactForm(
         state.value,
         { onIntent(ContactsIntent.ValueChanged(it)) },
         keyboardType = if (phone) KeyboardType.Phone else KeyboardType.Email,
+        mask = if (phone) Mask.Phone else Mask.None,
     )
     Field(stringResource(R.string.auth_contacts_current_password), state.password, {
         onIntent(ContactsIntent.PasswordChanged(it))

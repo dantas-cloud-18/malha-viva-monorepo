@@ -12,11 +12,16 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import br.malhaviva.core.designsystem.CheckInButton
 import br.malhaviva.core.designsystem.MalhaVivaSpacing
 import br.malhaviva.core.designsystem.MalhaVivaTheme
@@ -31,6 +36,7 @@ internal fun Title(
     modifier: Modifier = Modifier,
 ) = Text(text, modifier, style = MaterialTheme.typography.headlineSmall)
 
+@Suppress("LongParameterList")
 @Composable
 internal fun Field(
     label: String,
@@ -38,16 +44,35 @@ internal fun Field(
     onChange: (String) -> Unit,
     keyboardType: KeyboardType = KeyboardType.Text,
     secret: Boolean = false,
+    mask: Mask = Mask.None,
 ) {
+    var revealed by remember { mutableStateOf(false) }
     OutlinedTextField(
         value = value,
-        onValueChange = onChange,
+        onValueChange = { onChange(mask.sanitize(it)) },
         label = { Text(label) },
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
-        visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
+        visualTransformation =
+            when {
+                secret && !revealed -> PasswordVisualTransformation()
+                else -> mask.transformation()
+            },
         keyboardOptions = KeyboardOptions(keyboardType = if (secret) KeyboardType.Password else keyboardType),
+        trailingIcon = if (secret) ({ RevealToggle(revealed) { revealed = !revealed } }) else null,
     )
+}
+
+@Composable
+private fun RevealToggle(
+    revealed: Boolean,
+    onToggle: () -> Unit,
+) {
+    val description =
+        stringResource(if (revealed) R.string.auth_password_hide_desc else R.string.auth_password_show_desc)
+    TextButton(onToggle, Modifier.semantics { contentDescription = description }) {
+        Text(stringResource(if (revealed) R.string.auth_password_hide else R.string.auth_password_show))
+    }
 }
 
 @Composable
@@ -91,6 +116,7 @@ internal fun SignupForm(
         state.birthDate,
         { onIntent(AuthIntent.BirthDateChanged(it)) },
         keyboardType = KeyboardType.Number,
+        mask = Mask.Birth,
     )
     Hint(stringResource(R.string.auth_birth_hint))
     if (state.needsGuardian) GuardianFields(state, onIntent)
@@ -106,6 +132,7 @@ internal fun SignupForm(
         state.phone,
         { onIntent(AuthIntent.PhoneChanged(it)) },
         keyboardType = KeyboardType.Phone,
+        mask = Mask.Phone,
     )
     Hint(stringResource(R.string.auth_phone_hint))
     CheckInButton(stringResource(R.string.auth_signup_action), {
@@ -136,6 +163,7 @@ private fun GuardianFields(
         state.guardian,
         { onIntent(AuthIntent.GuardianChanged(it)) },
         keyboardType = if (phone) KeyboardType.Phone else KeyboardType.Email,
+        mask = if (phone) Mask.Phone else Mask.None,
     )
 }
 

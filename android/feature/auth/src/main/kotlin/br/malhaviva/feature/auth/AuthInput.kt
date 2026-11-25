@@ -21,7 +21,7 @@ fun isHandleValid(raw: String): Boolean = HANDLE_PATTERN.matches(normalizeHandle
 fun normalizePhone(raw: String): String = raw.filterNot { it.isWhitespace() || it in "-()." }
 
 /** Campo ainda com o DDI padrao (ou vazio) conta como "sem telefone". */
-fun isPhoneBlank(raw: String): Boolean = normalizePhone(raw).let { it.isEmpty() || it == DEFAULT_PHONE }
+fun isPhoneBlank(raw: String): Boolean = normalizePhone(raw).let { it.isEmpty() || it == "+" || it == DEFAULT_PHONE }
 
 fun isPhoneValid(raw: String): Boolean = PHONE_PATTERN.matches(normalizePhone(raw))
 
@@ -37,9 +37,11 @@ const val POLICY_VERSION = "2026-11-25"
 /** Menor de 12 anos: o cadastro exige o contato do responsavel (LGPD art. 14; ECA Digital). */
 const val GUARDIAN_AGE = 12
 private const val MAX_AGE = 120
-private val BIRTH_PATTERN = Regex("^([0-9]{2})/([0-9]{2})/([0-9]{4})$")
 
-/** Data digitada como dd/mm/aaaa. Null se invalida, futura ou com mais de 120 anos. */
+// Separador opcional (/, -, . ou espaco): teclados numericos nem sempre tem "/".
+private val BIRTH_PATTERN = Regex("^([0-9]{2})[/. -]?([0-9]{2})[/. -]?([0-9]{4})$")
+
+/** Data digitada como dd/mm/aaaa (ou dd-mm-aaaa, ddmmaaaa). Null se invalida, futura ou com mais de 120 anos. */
 fun parseBirthDate(
     raw: String,
     today: LocalDate,
