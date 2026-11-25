@@ -5,6 +5,8 @@ import br.malhaviva.auth.AuthConfig
 import br.malhaviva.auth.authRoutes
 import br.malhaviva.lgpd.RetentionConfig
 import br.malhaviva.lgpd.RetentionJob
+import br.malhaviva.network.NetworkRepository
+import br.malhaviva.network.networkRoutes
 import br.malhaviva.platform.Database
 import br.malhaviva.platform.DatabaseConfig
 import br.malhaviva.platform.health.healthRoutes
@@ -84,6 +86,7 @@ fun Application.module(
     routing {
         route("/v1") {
             healthRoutes(dataSource)
+            networkRoutes(NetworkRepository(dataSource))
             liveRoutes(liveHub)
             ingestRoutes(BatchIngestor(tokens, geometry, liveHub))
             tokenRoutes(TokenIssuer(tokens), integrity)

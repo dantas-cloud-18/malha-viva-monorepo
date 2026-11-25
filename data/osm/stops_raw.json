@@ -1,0 +1,326 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-11-25T11:50:21Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+
+{
+  "type": "node",
+  "id": 823651324,
+  "lat": -22.9156989,
+  "lon": -43.6843244,
+  "tags": {
+    "name": "Santa Cruz",
+    "public_transport": "stop_position",
+    "railway": "stop",
+    "train": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 823909050,
+  "lat": -22.9022661,
+  "lon": -43.5600036,
+  "tags": {
+    "IPP:CODESTFERR": "9",
+    "IPP:FONTE": "http://www.supervia.com.br/",
+    "IPP:RAMAL": "Santa Cruz",
+    "addr:city": "Rio de Janeiro",
+    "addr:country": "BR",
+    "addr:postcode": "23085-360",
+    "addr:street": "Rua Campo Grande",
+    "name": "Campo Grande",
+    "not:network:wikidata": "Q1125591",
+    "note": "Local sem número",
+    "opening_hours": "Mo-Fr 03:50-23:50; Sa 04:50-20:00; Su 05:15-21:30; PH 05:15-21:30",
+    "operator": "SuperVia",
+    "public_transport": "station",
+    "railway": "station",
+    "railway:ref": "CGE",
+    "source": "IPP",
+    "start_date": "1878-12-02",
+    "wheelchair": "no",
+    "wikidata": "Q10275623",
+    "wikimedia_commons": "Category:Estação Campo Grande",
+    "wikipedia": "pt:Estação Campo Grande (Rio de Janeiro)"
+  }
+},
+{
+  "type": "node",
+  "id": 823909093,
+  "lat": -22.9162516,
+  "lon": -43.6324651,
+  "tags": {
+    "IPP:CODESTFERR": "34",
+    "IPP:FONTE": "http://www.supervia.com.br/",
+    "IPP:RAMAL": "Santa Cruz",
+    "addr:city": "Rio de Janeiro",
+    "addr:country": "BR",
+    "addr:postcode": "23580-240",
+    "addr:street": "Estrada Urucânia",
+    "name": "Paciência",
+    "note": "Local sem número",
+    "opening_hours": "Mo-Fr 03:45-23:55; Sa 04:35-21:40; Su 05:05-21:40; PH 05:05-21:40",
+    "operator": "SuperVia",
+    "public_transport": "station",
+    "railway": "station",
+    "railway:ref": "PAC",
+    "source": "IPP",
+    "start_date": "1897-06-01",
+    "train": "yes",
+    "wheelchair": "no",
+    "wikidata": "Q10276025",
+    "wikimedia_commons": "Category:Estação Paciência",
+    "wikipedia": "pt:Estação Paciência"
+  }
+},
+{
+  "type": "node",
+  "id": 981218338,
+  "lat": -22.8932975,
+  "lon": -43.5376287,
+  "tags": {
+    "name": "Augusto Vasconcelos",
+    "public_transport": "stop_position",
+    "railway": "stop",
+    "train": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 981218388,
+  "lat": -22.9065037,
+  "lon": -43.5820205,
+  "tags": {
+    "name": "Benjamim do Monte",
+    "public_transport": "stop_position",
+    "railway": "stop",
+    "train": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 981221242,
+  "lat": -22.9129941,
+  "lon": -43.6154854,
+  "tags": {
+    "name": "Cosmos",
+    "public_transport": "stop_position",
+    "railway": "stop",
+    "train": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 981239286,
+  "lat": -22.8751174,
+  "lon": -43.4479120,
+  "tags": {
+    "name": "Mocidade/Padre Miguel",
+    "public_transport": "stop_position",
+    "railway": "stop",
+    "train": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 981240865,
+  "lat": -22.8754870,
+  "lon": -43.4666299,
+  "tags": {
+    "name": "Bangu",
+    "public_transport": "stop_position",
+    "train": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 4316668574,
+  "lat": -22.8747964,
+  "lon": -43.4300841,
+  "tags": {
+    "name": "Realengo",
+    "public_transport": "stop_position",
+    "railway": "stop",
+    "train": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 4316677815,
+  "lat": -22.8684030,
+  "lon": -43.4141666,
+  "tags": {
+    "name": "Magalhães Bastos",
+    "public_transport": "stop_position",
+    "railway": "stop",
+    "train": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 4316677820,
+  "lat": -22.8630363,
+  "lon": -43.4030582,
+  "tags": {
+    "name": "Vila Militar",
+    "public_transport": "stop_position",
+    "railway": "stop",
+    "train": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 4318193060,
+  "lat": -22.8752863,
+  "lon": -43.4573826,
+  "tags": {
+    "name": "Guilherme da Silveira",
+    "public_transport": "stop_position",
+    "train": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 4318193062,
+  "lat": -22.8758425,
+  "lon": -43.4868359,
+  "tags": {
+    "name": "Senador Camará",
+    "public_transport": "stop_position",
+    "train": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 4318205262,
+  "lat": -22.8802850,
+  "lon": -43.5122154,
+  "tags": {
+    "name": "Santíssimo",
+    "public_transport": "stop_position",
+    "train": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 4318464568,
+  "lat": -22.9091897,
+  "lon": -43.5958909,
+  "tags": {
+    "name": "Inhoaíba",
+    "public_transport": "stop_position",
+    "railway": "stop",
+    "train": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 4318900971,
+  "lat": -22.9187596,
+  "lon": -43.6504301,
+  "tags": {
+    "name": "Tancredo Neves",
+    "public_transport": "stop_position",
+    "railway": "stop",
+    "train": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 5457472816,
+  "lat": -22.9041243,
+  "lon": -43.2753014,
+  "tags": {
+    "name": "Silva Freire",
+    "public_transport": "stop_position",
+    "railway": "stop",
+    "train": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 6744789672,
+  "lat": -22.9041829,
+  "lon": -43.1920569,
+  "tags": {
+    "name": "Central do Brasil",
+    "public_transport": "stop_position",
+    "railway": "stop",
+    "train": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 6754229490,
+  "lat": -22.9093331,
+  "lon": -43.2335178,
+  "tags": {
+    "addr:street": "Avenida Presidente Castelo Branco",
+    "name": "Maracanã",
+    "old_name": "Derby Club",
+    "opening_hours": "Mo-Fr 04:25-23:35; Sa 05:55-21:05; Su 05:55-21:55; PH 05:50-19:30",
+    "operator": "SuperVia",
+    "public_transport": "stop_position",
+    "railway": "stop",
+    "ref": "MAR",
+    "source": "IPP",
+    "start_date": "1885",
+    "train": "yes",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 6754243063,
+  "lat": -22.8548578,
+  "lon": -43.3843364,
+  "tags": {
+    "name": "Deodoro",
+    "public_transport": "stop_position",
+    "railway": "stop",
+    "train": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 6754370501,
+  "lat": -22.8765530,
+  "lon": -43.3377672,
+  "tags": {
+    "name": "Madureira",
+    "public_transport": "stop_position",
+    "railway": "stop",
+    "train": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 6754370503,
+  "lat": -22.8954602,
+  "lon": -43.2936613,
+  "tags": {
+    "name": "Olímpica Engenho de Dentro",
+    "public_transport": "stop_position",
+    "railway": "stop",
+    "train": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 6754370504,
+  "lat": -22.9096668,
+  "lon": -43.2229289,
+  "tags": {
+    "name": "São Cristóvão",
+    "public_transport": "stop_position",
+    "railway": "stop",
+    "train": "yes"
+  }
+}
+
+  ]
+}
