@@ -24,6 +24,7 @@ import br.malhaviva.tracking.live.ClusterPolicy
 import br.malhaviva.tracking.live.CrowdingPolicy
 import br.malhaviva.tracking.live.LiveHub
 import br.malhaviva.tracking.live.StationCrowdingEstimator
+import br.malhaviva.tracking.live.StationCrowdingSmoother
 import br.malhaviva.tracking.live.StationRef
 import br.malhaviva.tracking.live.TrainClusterer
 import br.malhaviva.tracking.live.crowdingRoutes
@@ -98,10 +99,12 @@ fun Application.module(
             val network = NetworkRepository(dataSource)
             networkRoutes(network)
             liveRoutes(liveHub)
+            val minK = CrowdingPolicy.minContributorsFromEnv(System::getenv)
             crowdingRoutes(
                 liveHub,
                 { c -> network.find(c)?.stations?.map { StationRef(it.stationId, it.km * METERS_PER_KM) } },
-                StationCrowdingEstimator(CrowdingPolicy.minContributorsFromEnv(System::getenv)),
+                StationCrowdingEstimator(minK),
+                StationCrowdingSmoother(minK),
             )
             ingestRoutes(BatchIngestor(tokens, geometry, liveHub))
             tokenRoutes(TokenIssuer(tokens), integrity)

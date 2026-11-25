@@ -84,6 +84,63 @@ class StationCrowdingTest {
         assertEquals(0, hub.freshPositions(key).size)
     }
 
+    private var t = 0L
+    private val smoother = StationCrowdingSmoother(clock = { t })
+
+    private fun pub(n: Int) = smoother.publish(key, listOf("bangu" to n)).single().level
+
+    private fun settleLow() {
+        t = 0
+        pub(5)
+        t += CrowdingPolicy.HOLD_MS
+        assertEquals(CrowdingLevel.LOW, pub(5))
+    }
+
+    @Test
+    fun `null to visible waits the hold`() {
+        assertNull(pub(5))
+        t += CrowdingPolicy.HOLD_MS - 1
+        assertNull(pub(5))
+        t += 1
+        assertEquals(CrowdingLevel.LOW, pub(5))
+    }
+
+    @Test
+    fun `flapping around a boundary keeps the published level`() {
+        settleLow()
+        repeat(10) {
+            t += 5_000
+            assertEquals(CrowdingLevel.LOW, pub(if (it % 2 == 0) 12 else 9))
+        }
+        t += CrowdingPolicy.HOLD_MS * 2
+        assertEquals(CrowdingLevel.LOW, pub(11)) // dentro da margem (9 + 2)
+    }
+
+    @Test
+    fun `sustained change publishes after hold and needs margin to leave`() {
+        settleLow()
+        assertEquals(CrowdingLevel.LOW, pub(12))
+        t += CrowdingPolicy.HOLD_MS - 1
+        assertEquals(CrowdingLevel.LOW, pub(12))
+        t += 1
+        assertEquals(CrowdingLevel.MEDIUM, pub(12))
+        t += CrowdingPolicy.HOLD_MS * 2
+        assertEquals(CrowdingLevel.MEDIUM, pub(8)) // 10 - 2: ainda medium
+        t += CrowdingPolicy.HOLD_MS * 2
+        assertEquals(CrowdingLevel.MEDIUM, pub(7)) // fora da margem: candidato LOW comeca
+        t += CrowdingPolicy.HOLD_MS
+        assertEquals(CrowdingLevel.LOW, pub(7))
+    }
+
+    @Test
+    fun `dropping below k publishes null immediately and re-entry waits`() {
+        settleLow()
+        assertNull(pub(4))
+        assertNull(pub(6))
+        t += CrowdingPolicy.HOLD_MS
+        assertEquals(CrowdingLevel.LOW, pub(6))
+    }
+
     @Test
     fun `env floor is 5 and invalid falls back`() {
         fun k(v: String?) = CrowdingPolicy.minContributorsFromEnv { v }
@@ -102,7 +159,13 @@ class StationCrowdingTest {
             application {
                 install(ContentNegotiation) { json() }
                 routing {
-                    route("/v1") { crowdingRoutes(hub, { c -> if (c == key.corridor) stations else null }) }
+                    route("/v1") {
+                        crowdingRoutes(
+                            hub,
+                            { c -> if (c == key.corridor) stations else null },
+                            smoother = StationCrowdingSmoother(holdMs = 0),
+                        )
+                    }
                 }
             }
             val res = client.get("/v1/corridors/RAMAL_SANTA_CRUZ/stations/crowding?direction=CENTRAL_TO_SANTA_CRUZ")
