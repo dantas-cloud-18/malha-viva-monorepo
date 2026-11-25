@@ -62,7 +62,7 @@ Probabilidade (B/M/A) e impacto (B/M/A), antes e depois das mitigações. Valore
 |---|---|---|---|---|
 | R1 | Reidentificação por trajetória (casa, trabalho, rotina) | A/A | ID efêmero por viagem, corte de 300 m no início e no fim (`sanitizeTrip`), descarte fora do corredor, TTL 24 h. Limiar mínimo de publicação: **implementado** (k=3, `MALHAVIVA_TRAIN_MIN_CONTRIBUTORS`, piso 2) | B/M |
 | R2 | Trem de 1 sinal expõe o deslocamento de uma pessoa em tempo real | A/A | `TrainState` só é publicado (polling e SSE) com pelo menos k=3 IDs efêmeros distintos na janela de 30 s; a mesma viagem enviando vários pontos conta uma vez (`TrainClusterer`, testado). k configurável, nunca abaixo de 2 | B/M |
-| R3 | Lotação de estação vazia revela presença individual | A/A | k-anonimato na lotação (seção 7). **NAO IMPLEMENTADO** | B/M |
+| R3 | Lotação de estação vazia revela presença individual | A/A | Nível de lotação só é publicado com pelo menos k_lot=5 viagens anônimas distintas paradas na estação na janela de 30 s (`StationCrowdingEstimator`, `MALHAVIVA_STATION_MIN_CONTRIBUTORS`, piso 5; abaixo disso `level` é nulo, "sem dados"). Só faixas low/medium/high (5 a 9, 10 a 19, 20 ou mais), nunca a contagem; a mesma viagem conta uma vez. **Implementado e testado.** Pendente: histerese e atraso mínimo entre degraus (diferenciação, seção 7.1) | B/M |
 | R4 | Menor compartilhando localização | M/A | Bloqueio para menores de 18 (`sharingBlocked`), mas depende de perfil de idade **NAO IMPLEMENTADO** | A/A até existir verificação de idade |
 | R5 | Vazamento de contatos (telefone e e-mail em claro em `accounts`) | M/A | Criptografia do RDS em repouso, acesso mínimo, logs sem PII. Avaliar cifra por coluna | M/M |
 | R6 | Ligação indevida entre conta e posição (operador, log, metadado) | B/A | Planos separados, sem `user_id` na telemetria, logs sem coordenadas, token anônimo. Teste automatizado a confirmar (Fase 3.5) | B/A |
@@ -93,6 +93,7 @@ Conclusão provisória: as posições brutas **não** são dado anonimizado (art
 
 - **Publicação de trem**: só publicar posição com pelo menos **k_trem** IDs efêmeros distintos. Proposta: k_trem = 3 (alinha com `ConsensusPolicy.MIN_TRUSTED` e com o critério da Fase 3). Abaixo disso, mostrar horário previsto, rotulado como previsto.
 - **Lotação de estação**: 3 níveis (baixa, média, alta). Publicar só com pelo menos **k_lot** check-ins "Estou na estação" distintos na janela. Proposta: k_lot = 5. Abaixo: "sem dados de lotação".
+  - **Estado atual**: não há check-in explícito. O sinal é a viagem anônima parada (velocidade até 1 m/s, até 100 m da estação ao longo da via) na janela de 30 s do LiveHub, contada por ID efêmero distinto. k_lot = 5 é piso no servidor. Viagens sem sentido inferido ainda não entram.
 - **Degraus**: os limites entre níveis devem ser tais que mesmo o nível mais baixo exija k_lot.
 - **Diferenciação**: k=5 numa leitura e k=6 na seguinte revelam a entrada de 1 pessoa. Mitigar com arredondamento para o degrau, histerese e atraso mínimo entre mudanças de degrau. Janela deslizante curta (proposta 5 min).
 - **Persistência**: agregados históricos com carimbo grosso (ex.: faixa de 15 min) e sem contagem exata abaixo de k.

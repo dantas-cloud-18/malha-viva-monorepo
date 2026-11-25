@@ -35,7 +35,7 @@ Não coletamos o modelo do seu aparelho, o ID de publicidade, nem seu IP junto d
 - Enquanto compartilha, o app mostra um indicador com o botão **Parar**, que encerra o envio com um toque. Você pode revogar a qualquer momento. [PENDENTE: registro da revogação]
 - A posição é enviada com um **identificador temporário da viagem**, sem seu nome, conta, telefone, aparelho ou IP. Ao fim da viagem o identificador deixa de existir.
 - O aparelho **descarta** pontos fora da linha do trem e **corta o começo e o fim** da viagem, para proteger sua casa e seu trabalho.
-- Mostramos a posição de um trem ou a lotação de uma estação **só quando há pessoas suficientes** para que ninguém seja identificado. [PENDENTE: regra mínima de pessoas, ver RIPD]
+- Mostramos a posição de um trem ou a lotação de uma estação **só quando há pessoas suficientes** para que ninguém seja identificado. A regra mínima é de 3 pessoas para trens e de 5 para estações.
 - As posições são **apagadas automaticamente em até 24 horas**. Só números agregados e anônimos permanecem.
 - Menores de 18 anos **não podem** compartilhar localização.
 
