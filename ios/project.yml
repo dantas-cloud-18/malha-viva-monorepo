@@ -19,6 +19,14 @@ targets:
       properties:
         CFBundleDisplayName: Malha Viva
         NSSupportsLiveActivities: true
+        NSLocationWhenInUseUsageDescription: >-
+          O Malha Viva usa sua posição somente enquanto você compartilha a viagem, para mostrar onde estão os
+          trens e se a estação está cheia. Sua posição é enviada sem seu nome ou conta e apagada em até 24 horas.
+          Você pode parar a qualquer momento.
+        # Localização com a tela bloqueada durante a viagem compartilhada (indicador azul). Não usa "Sempre".
+        UIBackgroundModes: [location]
+        # Só HTTPS/TLS e criptografia do sistema (isenta). Jurídico confirma.
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
     dependencies:
       - target: MalhaVivaWidgets
