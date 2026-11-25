@@ -137,6 +137,13 @@ android {
         }
         release {
             buildConfigField("String", "API_BASE_URL", "\"$releaseApiBaseUrl\"")
+            // Piloto (-Pmalhaviva.pilot=true): sem Play Integrity, envia o token de teste que o servidor de piloto
+            // aceita com MALHAVIVA_DEV_INTEGRITY=true. Build de loja deixa false: nenhum lote sai sem atestacao real.
+            buildConfigField(
+                "boolean",
+                "PILOT_INTEGRITY",
+                providers.gradleProperty("malhaviva.pilot").getOrElse("false"),
+            )
             isDebuggable = false
             signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = true
